@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Physics Graph</title>
+
+  <!-- KaTeX (display render) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+
+  <!-- MathLive (editable math field) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.101.0/dist/mathlive.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+
+  <link rel="stylesheet" href="./styles.css" />
+  <script defer src="./app.js"></script>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <div class="title">Physics Graph</div>
+        <div class="subtitle">Paste LaTeX, edit as math, render on blur</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="btnExport" class="btn">export</button>
+      <label class="btn filebtn">
+        import
+        <input id="fileImport" type="file" accept="application/json" />
+      </label>
+      <button id="btnReset" class="btn btnDanger">reset local</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel">
+      <div class="panelTitle">models</div>
+      <div class="panelBody">
+        <button id="loadThermo" class="pill">thermo starter</button>
+        <div class="hint">
+          edits auto-save in your browser.<br />
+          export if you want a backup file.
+        </div>
+      </div>
+
+      <div class="panelTitle">inspector</div>
+      <div id="inspector" class="panelBody inspector">
+        click any symbol to see where it appears
+      </div>
+    </aside>
+
+    <section class="content">
+      <div class="contentTop">
+        <div id="status" class="status">loading…</div>
+      </div>
+
+      <div id="cards" class="cards"></div>
+    </section>
+  </main>
+</body>
+</html>
