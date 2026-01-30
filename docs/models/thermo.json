@@ -1,14 +1,20 @@
 {
   "vars": [
-    { "id": "v_P", "latex": "P", "name": "pressure", "type": "scalar", "units": "Pa" },
-    { "id": "v_rho", "latex": "\\rho", "name": "density", "type": "scalar", "units": "kg/m^3" },
-    { "id": "v_T", "latex": "T", "name": "temperature", "type": "scalar", "units": "K" },
-    { "id": "v_R", "latex": "R", "name": "specific gas constant", "type": "scalar", "units": "J/(kg\\cdot K)" },
-    { "id": "v_p", "latex": "p", "name": "pressure (alt symbol)", "type": "scalar", "units": "Pa" }
+    { "id": "v_P",   "latex": "P",      "name": "pressure",          "type": "scalar", "units": "Pa" },
+    { "id": "v_rho", "latex": "\\rho",  "name": "density",           "type": "scalar", "units": "kg/m^3" },
+    { "id": "v_T",   "latex": "T",      "name": "temperature",       "type": "scalar", "units": "K" },
+    { "id": "v_R",   "latex": "R",      "name": "spec gas constant", "type": "scalar", "units": "J/(kg*K)" },
+
+    { "id": "v_mu",  "latex": "\\mu",   "name": "dyn viscosity",     "type": "scalar", "units": "Pa*s" },
+    { "id": "v_u",   "latex": "u",      "name": "velocity",          "type": "scalar", "units": "m/s" },
+    { "id": "v_x",   "latex": "x",      "name": "length",            "type": "scalar", "units": "m" },
+    { "id": "v_tau", "latex": "\\tau",  "name": "shear stress",      "type": "scalar", "units": "Pa" },
+
+    { "id": "v_k",   "latex": "k",      "name": "thermal conductivity", "type": "scalar", "units": "W/(m*K)" },
+    { "id": "v_q",   "latex": "q",      "name": "heat flux",            "type": "scalar", "units": "W/m^2" }
   ],
   "assumptions": [
-    { "id": "ideal_gas", "label": "ideal gas", "enabled": true },
-    { "id": "equilibrium", "label": "equilibrium", "enabled": true }
+    { "id": "ideal_gas", "label": "ideal gas", "enabled": true }
   ],
   "values": [],
   "eqs": [
@@ -16,17 +22,35 @@
       "id": "eq_ideal_gas",
       "title": "ideal gas equation of state",
       "latex": "P = \\rho R T",
-      "assumptions": ["ideal_gas", "equilibrium"],
+      "assumptions": ["ideal_gas"],
       "tags": ["thermo", "eos"],
       "status": "unknown",
       "diagnostics": []
     },
     {
-      "id": "eq_pressure_alias",
-      "title": "pressure symbol alias (placeholder)",
-      "latex": "p = P",
+      "id": "eq_shear_stress",
+      "title": "simple shear stress scaling",
+      "latex": "\\tau = \\mu \\frac{u}{x}",
       "assumptions": [],
-      "tags": ["thermo"],
+      "tags": ["fluids", "viscosity"],
+      "status": "unknown",
+      "diagnostics": []
+    },
+    {
+      "id": "eq_fourier_good",
+      "title": "fourier law (simple 1d scaling)",
+      "latex": "q = -k\\frac{T}{x}",
+      "assumptions": [],
+      "tags": ["heat"],
+      "status": "unknown",
+      "diagnostics": []
+    },
+    {
+      "id": "eq_fourier_bad",
+      "title": "deliberately wrong: heat flux without gradient",
+      "latex": "q = -kT",
+      "assumptions": [],
+      "tags": ["heat", "demo"],
       "status": "unknown",
       "diagnostics": []
     }
