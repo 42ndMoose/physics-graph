@@ -1,0 +1,191 @@
+:root {
+  --bg: #0b0d10;
+  --panel: #12151b;
+  --card: #151a22;
+  --text: #e6e8ee;
+  --muted: #9aa3b2;
+  --line: #232a36;
+  --good: #2fe38c;
+  --warn: #ffd166;
+  --bad: #ff5c7a;
+  --accent: #7aa2ff;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(10, 12, 16, 0.85);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.brand { display: flex; gap: 12px; align-items: center; }
+.dot { width: 12px; height: 12px; border-radius: 999px; background: var(--accent); }
+.title { font-weight: 700; letter-spacing: 0.2px; }
+.subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.actions { display: flex; gap: 8px; align-items: center; }
+.btn {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0f131a;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn:hover { border-color: #334055; }
+.btnDanger { border-color: rgba(255,92,122,0.35); }
+.btnDanger:hover { border-color: rgba(255,92,122,0.8); }
+
+.filebtn { position: relative; overflow: hidden; display: inline-flex; align-items: center; }
+.filebtn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: calc(100vh - 62px);
+}
+
+.panel {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.panelTitle {
+  padding: 14px 16px 10px 16px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: lowercase;
+  letter-spacing: 0.5px;
+}
+
+.panelBody {
+  padding: 0 16px 16px 16px;
+}
+
+.hint {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pill {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #0f131a;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.pill:hover { border-color: #334055; }
+
+.content { padding: 16px; }
+.contentTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.status { color: var(--muted); font-size: 13px; }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.cardTop {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.cardTitle { font-weight: 700; }
+.cardTags { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.badge.good { border-color: rgba(47,227,140,0.4); color: var(--good); }
+.badge.warn { border-color: rgba(255,209,102,0.4); color: var(--warn); }
+.badge.bad  { border-color: rgba(255,92,122,0.45); color: var(--bad); }
+
+.mathBox {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
+  background: #0f131a;
+  min-height: 54px;
+}
+
+.mathDisplay { cursor: text; }
+.mathEdit { display: none; }
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.small {
+  padding: 7px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #0f131a;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.small:hover { border-color: #334055; }
+
+.symbol {
+  display: inline-flex;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+  background: #0f131a;
+}
+.symbol:hover { border-color: #334055; }
+
+.inspector {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.inspector strong { color: var(--text); }
