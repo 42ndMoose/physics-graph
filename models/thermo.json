@@ -1,0 +1,34 @@
+{
+  "vars": [
+    { "id": "v_P", "latex": "P", "name": "pressure", "type": "scalar", "units": "Pa" },
+    { "id": "v_rho", "latex": "\\rho", "name": "density", "type": "scalar", "units": "kg/m^3" },
+    { "id": "v_T", "latex": "T", "name": "temperature", "type": "scalar", "units": "K" },
+    { "id": "v_R", "latex": "R", "name": "specific gas constant", "type": "scalar", "units": "J/(kg\\cdot K)" },
+    { "id": "v_p", "latex": "p", "name": "pressure (alt symbol)", "type": "scalar", "units": "Pa" }
+  ],
+  "assumptions": [
+    { "id": "ideal_gas", "label": "ideal gas", "enabled": true },
+    { "id": "equilibrium", "label": "equilibrium", "enabled": true }
+  ],
+  "values": [],
+  "eqs": [
+    {
+      "id": "eq_ideal_gas",
+      "title": "ideal gas equation of state",
+      "latex": "P = \\rho R T",
+      "assumptions": ["ideal_gas", "equilibrium"],
+      "tags": ["thermo", "eos"],
+      "status": "unknown",
+      "diagnostics": []
+    },
+    {
+      "id": "eq_pressure_alias",
+      "title": "pressure symbol alias (placeholder)",
+      "latex": "p = P",
+      "assumptions": [],
+      "tags": ["thermo"],
+      "status": "unknown",
+      "diagnostics": []
+    }
+  ]
+}
