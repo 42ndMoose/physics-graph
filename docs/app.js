@@ -280,7 +280,7 @@ async function bootstrap() {
   });
 
   document.getElementById("loadThermo").addEventListener("click", async () => {
-    const starter = await fetchJson("../models/thermo.json");
+    const starter = await fetchJson("./models/thermo.json");
     project.vars = starter.vars;
     project.eqs = starter.eqs;
     project.assumptions = starter.assumptions ?? [];
