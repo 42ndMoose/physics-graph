@@ -403,7 +403,7 @@ function unitCheckEquation(eqLatex, varDimMap) {
 }
 
 // --------------------
-// Project storage + helpers
+// Storage + helpers
 // --------------------
 function setStatus(msg) {
   const el = document.getElementById("status");
@@ -464,9 +464,9 @@ function colorForSymbol(project, latexSym) {
 }
 
 function extractSymbols(latex) {
-  const greek = latex.match(/\\[a-zA-Z]+/g) ?? [];
-  const letters = latex.match(/\b[a-zA-Z]\b/g) ?? [];
-  const subs = latex.match(/[a-zA-Z](?=_{)/g) ?? [];
+  const greek = (latex || "").match(/\\[a-zA-Z]+/g) ?? [];
+  const letters = (latex || "").match(/\b[a-zA-Z]\b/g) ?? [];
+  const subs = (latex || "").match(/[a-zA-Z](?=_{)/g) ?? [];
   const all = [...greek, ...letters, ...subs];
 
   const blacklist = new Set([
@@ -510,7 +510,7 @@ function badgeClass(status) {
 }
 
 // --------------------
-// Inspector + rendering
+// Rendering
 // --------------------
 function renderInspector(project, usage, symbol) {
   const el = document.getElementById("inspector");
@@ -537,13 +537,6 @@ function hideKeyboardNow() {
   try {
     if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide();
   } catch {}
-  const x = document.getElementById("btnKbHide");
-  if (x) x.style.display = "none";
-}
-
-function applyKeyboardToField(mf, enabled) {
-  if (!mf) return;
-  mf.setOptions({ virtualKeyboardMode: enabled ? "onfocus" : "off" });
 }
 
 function renderVarsTable(project) {
@@ -587,7 +580,6 @@ function renderCards(project) {
   const usage = buildUsageIndex(project);
   const varDimMap = buildVarDimMap(project);
 
-  // compute unit-check results for display (no auto-saving here)
   for (const eq of (project.eqs || [])) {
     const res = unitCheckEquation(eq.latex || "", varDimMap);
     eq._status = res.status;
@@ -668,16 +660,6 @@ function renderCards(project) {
       mf.focus();
     });
 
-    // keyboard behavior per project setting
-    const kbEnabled = (project?.ui?.keyboardEnabled ?? true);
-    applyKeyboardToField(mf, kbEnabled);
-
-    mf.addEventListener("focus", () => {
-      const enabledNow = (loadProject()?.ui?.keyboardEnabled ?? true);
-      const x = document.getElementById("btnKbHide");
-      if (x) x.style.display = enabledNow ? "block" : "none";
-    });
-
     mf.addEventListener("blur", () => {
       hideKeyboardNow();
       eq.latex = mf.value || eq.latex;
@@ -718,15 +700,11 @@ async function bootstrap() {
       eqs: [],
       assumptions: [],
       values: [],
-      ui: { keyboardEnabled: true }
+      ui: {}
     };
     saveProject(project);
-  } else {
-    project.ui ??= {};
-    if (project.ui.keyboardEnabled == null) project.ui.keyboardEnabled = true;
   }
 
-  // export/import/reset
   const btnExport = document.getElementById("btnExport");
   if (btnExport) {
     btnExport.addEventListener("click", () => {
@@ -754,8 +732,6 @@ async function bootstrap() {
         return;
       }
       project = obj;
-      project.ui ??= {};
-      if (project.ui.keyboardEnabled == null) project.ui.keyboardEnabled = true;
       saveProject(project);
       renderAll(project);
       setStatus("imported");
@@ -763,7 +739,6 @@ async function bootstrap() {
     });
   }
 
-  // thermo starter
   const loadThermo = document.getElementById("loadThermo");
   if (loadThermo) {
     loadThermo.addEventListener("click", async () => {
@@ -773,8 +748,6 @@ async function bootstrap() {
         project.eqs = starter.eqs || [];
         project.assumptions = starter.assumptions ?? [];
         project.values = starter.values ?? [];
-        project.ui ??= {};
-        if (project.ui.keyboardEnabled == null) project.ui.keyboardEnabled = true;
         saveProject(project);
         renderAll(project);
         setStatus("loaded thermo starter");
@@ -786,33 +759,23 @@ async function bootstrap() {
     });
   }
 
-  // keyboard toggle button (cleaner label)
-  const btnKbToggle = document.getElementById("btnKbToggle");
-  if (btnKbToggle) {
-    const updateLabel = () => {
-      const enabled = (project?.ui?.keyboardEnabled ?? true);
-      btnKbToggle.textContent = enabled ? "keyboard" : "keyboard off";
-    };
-    updateLabel();
-
-    btnKbToggle.addEventListener("click", () => {
-      project.ui.keyboardEnabled = !project.ui.keyboardEnabled;
-      saveProject(project);
-      updateLabel();
-
-      // apply to currently rendered fields
-      document.querySelectorAll("math-field").forEach(mf => applyKeyboardToField(mf, project.ui.keyboardEnabled));
-      if (!project.ui.keyboardEnabled) hideKeyboardNow();
-    });
-  }
-
-  // floating X to hide keyboard
-  const btnKbHide = document.getElementById("btnKbHide");
-  if (btnKbHide) {
-    btnKbHide.addEventListener("click", () => {
-      hideKeyboardNow();
-      const active = document.activeElement;
-      if (active && active.tagName && active.tagName.toLowerCase() === "math-field") active.blur();
+  const loadMech = document.getElementById("loadMechanics");
+  if (loadMech) {
+    loadMech.addEventListener("click", async () => {
+      try {
+        const starter = await fetchJson("./models/mechanics.json");
+        project.vars = starter.vars || [];
+        project.eqs = starter.eqs || [];
+        project.assumptions = starter.assumptions ?? [];
+        project.values = starter.values ?? [];
+        saveProject(project);
+        renderAll(project);
+        setStatus("loaded mechanics starter");
+        setTimeout(() => setStatus("ready"), 900);
+      } catch (e) {
+        console.error(e);
+        setStatus("failed to load mechanics.json");
+      }
     });
   }
 
@@ -820,18 +783,8 @@ async function bootstrap() {
   document.addEventListener("mousedown", (ev) => {
     const target = ev.target;
     const insideMathField = target && target.closest && target.closest("math-field");
-    const clickedX = target && target.id === "btnKbHide";
-    if (!insideMathField && !clickedX) hideKeyboardNow();
+    if (!insideMathField) hideKeyboardNow();
   });
-
-  // graph placeholder so button doesn’t feel dead
-  const btnGraphSoon = document.getElementById("btnGraphSoon");
-  if (btnGraphSoon) {
-    btnGraphSoon.addEventListener("click", () => {
-      setStatus("graph view not wired yet");
-      setTimeout(() => setStatus("ready"), 900);
-    });
-  }
 
   renderAll(project);
   setStatus("ready");
