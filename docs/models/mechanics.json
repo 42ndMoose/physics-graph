@@ -1,0 +1,59 @@
+{
+  "vars": [
+    { "id": "v_F", "latex": "F", "name": "force", "type": "scalar", "units": "N" },
+    { "id": "v_m", "latex": "m", "name": "mass", "type": "scalar", "units": "kg" },
+    { "id": "v_a", "latex": "a", "name": "acceleration", "type": "scalar", "units": "m/s^2" },
+
+    { "id": "v_p", "latex": "p", "name": "momentum", "type": "scalar", "units": "kg*m/s" },
+    { "id": "v_v", "latex": "v", "name": "velocity", "type": "scalar", "units": "m/s" },
+
+    { "id": "v_E", "latex": "E", "name": "energy", "type": "scalar", "units": "J" },
+    { "id": "v_P", "latex": "P", "name": "power", "type": "scalar", "units": "W" },
+    { "id": "v_t", "latex": "t", "name": "time", "type": "scalar", "units": "s" },
+
+    { "id": "v_W", "latex": "W", "name": "work", "type": "scalar", "units": "J" },
+    { "id": "v_x", "latex": "x", "name": "distance", "type": "scalar", "units": "m" }
+  ],
+  "assumptions": [
+    { "id": "newtonian", "label": "newtonian mechanics", "enabled": true }
+  ],
+  "values": [],
+  "eqs": [
+    {
+      "id": "eq_newton2",
+      "title": "newton's 2nd law",
+      "latex": "F = ma",
+      "assumptions": ["newtonian"],
+      "tags": ["mech"],
+      "status": "unknown",
+      "diagnostics": []
+    },
+    {
+      "id": "eq_momentum",
+      "title": "momentum definition",
+      "latex": "p = mv",
+      "assumptions": ["newtonian"],
+      "tags": ["mech"],
+      "status": "unknown",
+      "diagnostics": []
+    },
+    {
+      "id": "eq_power",
+      "title": "power from energy",
+      "latex": "P = \\frac{E}{t}",
+      "assumptions": ["newtonian"],
+      "tags": ["mech"],
+      "status": "unknown",
+      "diagnostics": []
+    },
+    {
+      "id": "eq_work_bad",
+      "title": "deliberately wrong: work missing distance",
+      "latex": "W = F",
+      "assumptions": ["newtonian"],
+      "tags": ["mech","demo"],
+      "status": "unknown",
+      "diagnostics": []
+    }
+  ]
+}
