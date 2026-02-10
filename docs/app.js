@@ -536,6 +536,27 @@ function badgeClass(status) {
   return "badge warn";
 }
 
+
+
+function getAppState() {
+  globalThis.__physicsGraphAppState ??= {
+    explorerFilterEqIds: null,
+    explorerSelectedSymbol: null
+  };
+  return globalThis.__physicsGraphAppState;
+}
+
+function normalizeProject(project) {
+  const base = project && typeof project === "object" ? project : {};
+  base.project ??= { id: "proj_001", name: "physics graph", version: 1 };
+  base.vars = Array.isArray(base.vars) ? base.vars : [];
+  base.eqs = Array.isArray(base.eqs) ? base.eqs : [];
+  base.assumptions = Array.isArray(base.assumptions) ? base.assumptions : [];
+  base.values = Array.isArray(base.values) ? base.values : [];
+  base.ui ??= {};
+  return base;
+}
+
 // --------------------
 // Explorer canvas (zoom + pan)
 // --------------------
@@ -903,7 +924,7 @@ function renderCards(project) {
 
   const stateRef = getAppState();
   for (const eq of (project.eqs || [])) {
-    if (appState.explorerFilterEqIds && !appState.explorerFilterEqIds.includes(eq.id)) {
+    if (stateRef.explorerFilterEqIds && !stateRef.explorerFilterEqIds.includes(eq.id)) {
       continue;
     }
     const card = document.createElement("div");
