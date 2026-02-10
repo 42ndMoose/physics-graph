@@ -289,42 +289,6 @@ body {
   text-decoration: none;
 }
 
-.detailChoice {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(11, 13, 16, 0.6);
-  cursor: pointer;
-}
-
-.detailChoiceActive {
-  border-color: rgba(122,162,255,0.6);
-  box-shadow: 0 0 0 1px rgba(122,162,255,0.25);
-}
-
-.detailChoiceTitle {
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.detailChoiceMeta {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.detailChoiceMeta a {
-  color: var(--accent);
-}
-
-.detailChoiceEq {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  color: var(--text);
-}
-
 .detailBadge {
   align-self: flex-start;
   padding: 4px 8px;
