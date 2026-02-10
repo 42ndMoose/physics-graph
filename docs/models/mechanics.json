@@ -1,21 +1,82 @@
 {
   "vars": [
-    { "id": "v_F", "latex": "F", "name": "force", "type": "scalar", "units": "N" },
-    { "id": "v_m", "latex": "m", "name": "mass", "type": "scalar", "units": "kg" },
-    { "id": "v_a", "latex": "a", "name": "acceleration", "type": "scalar", "units": "m/s^2" },
-
-    { "id": "v_p", "latex": "p", "name": "momentum", "type": "scalar", "units": "kg*m/s" },
-    { "id": "v_v", "latex": "v", "name": "velocity", "type": "scalar", "units": "m/s" },
-
-    { "id": "v_E", "latex": "E", "name": "energy", "type": "scalar", "units": "J" },
-    { "id": "v_P", "latex": "P", "name": "power", "type": "scalar", "units": "W" },
-    { "id": "v_t", "latex": "t", "name": "time", "type": "scalar", "units": "s" },
-
-    { "id": "v_W", "latex": "W", "name": "work", "type": "scalar", "units": "J" },
-    { "id": "v_x", "latex": "x", "name": "distance", "type": "scalar", "units": "m" }
+    {
+      "id": "v_F",
+      "latex": "F",
+      "name": "force",
+      "type": "scalar",
+      "units": "N"
+    },
+    {
+      "id": "v_m",
+      "latex": "m",
+      "name": "mass",
+      "type": "scalar",
+      "units": "kg"
+    },
+    {
+      "id": "v_a",
+      "latex": "a",
+      "name": "acceleration",
+      "type": "scalar",
+      "units": "m/s^2"
+    },
+    {
+      "id": "v_p",
+      "latex": "p",
+      "name": "momentum",
+      "type": "scalar",
+      "units": "kg*m/s"
+    },
+    {
+      "id": "v_v",
+      "latex": "v",
+      "name": "velocity",
+      "type": "scalar",
+      "units": "m/s"
+    },
+    {
+      "id": "v_E",
+      "latex": "E",
+      "name": "energy",
+      "type": "scalar",
+      "units": "J"
+    },
+    {
+      "id": "v_P",
+      "latex": "P",
+      "name": "power",
+      "type": "scalar",
+      "units": "W"
+    },
+    {
+      "id": "v_t",
+      "latex": "t",
+      "name": "time",
+      "type": "scalar",
+      "units": "s"
+    },
+    {
+      "id": "v_W",
+      "latex": "W",
+      "name": "work",
+      "type": "scalar",
+      "units": "J"
+    },
+    {
+      "id": "v_x",
+      "latex": "x",
+      "name": "distance",
+      "type": "scalar",
+      "units": "m"
+    }
   ],
   "assumptions": [
-    { "id": "newtonian", "label": "newtonian mechanics", "enabled": true }
+    {
+      "id": "newtonian",
+      "label": "newtonian mechanics",
+      "enabled": true
+    }
   ],
   "values": [],
   "eqs": [
@@ -23,17 +84,43 @@
       "id": "eq_newton2",
       "title": "newton's 2nd law",
       "latex": "F = ma",
-      "assumptions": ["newtonian"],
-      "tags": ["mech"],
+      "assumptions": [
+        "newtonian"
+      ],
+      "tags": [
+        "mech"
+      ],
       "status": "unknown",
-      "diagnostics": []
+      "diagnostics": [],
+      "theory": "Newtonian mechanics",
+      "doi": "10.5479/sil.52126.39088015628375",
+      "sourceUrl": "https://doi.org/10.5479/sil.52126.39088015628375"
+    },
+    {
+      "id": "eq_force_potential",
+      "title": "force from potential",
+      "latex": "F = -\\nabla U",
+      "assumptions": [],
+      "tags": [
+        "mech",
+        "alt-theory"
+      ],
+      "status": "unknown",
+      "diagnostics": [],
+      "theory": "Analytical mechanics",
+      "doi": "10.1007/978-1-4612-1246-0",
+      "sourceUrl": "https://doi.org/10.1007/978-1-4612-1246-0"
     },
     {
       "id": "eq_momentum",
       "title": "momentum definition",
       "latex": "p = mv",
-      "assumptions": ["newtonian"],
-      "tags": ["mech"],
+      "assumptions": [
+        "newtonian"
+      ],
+      "tags": [
+        "mech"
+      ],
       "status": "unknown",
       "diagnostics": []
     },
@@ -41,8 +128,12 @@
       "id": "eq_power",
       "title": "power from energy",
       "latex": "P = \\frac{E}{t}",
-      "assumptions": ["newtonian"],
-      "tags": ["mech"],
+      "assumptions": [
+        "newtonian"
+      ],
+      "tags": [
+        "mech"
+      ],
       "status": "unknown",
       "diagnostics": []
     },
@@ -50,8 +141,13 @@
       "id": "eq_work_bad",
       "title": "deliberately wrong: work missing distance",
       "latex": "W = F",
-      "assumptions": ["newtonian"],
-      "tags": ["mech","demo"],
+      "assumptions": [
+        "newtonian"
+      ],
+      "tags": [
+        "mech",
+        "demo"
+      ],
       "status": "unknown",
       "diagnostics": []
     }

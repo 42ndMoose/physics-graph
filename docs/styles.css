@@ -102,6 +102,73 @@ body {
 }
 .pill:hover { border-color: #334055; }
 
+
+.pill + .pill {
+  margin-top: 8px;
+}
+
+.focusSection {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.symbolJump.isActive,
+.symbolJump.isHover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.altList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.altEq {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  background: #121925;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.altEq.isActive {
+  border-color: rgba(47,227,140,0.7);
+}
+
+.altTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.altLatex {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-top: 4px;
+}
+
+.altMeta {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.altLinks {
+  margin-top: 6px;
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.altLinks a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .content { padding: 16px; }
 .contentTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .status { color: var(--muted); font-size: 13px; }

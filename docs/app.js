@@ -541,9 +541,42 @@ function badgeClass(status) {
 function getAppState() {
   globalThis.__physicsGraphAppState ??= {
     explorerFilterEqIds: null,
-    explorerSelectedSymbol: null
+    explorerSelectedSymbol: null,
+    explorerNodeId: null
   };
   return globalThis.__physicsGraphAppState;
+}
+
+function normalizeEquationText(latex) {
+  return (latex || "").replaceAll(" ", "").trim();
+}
+
+function equationIdsForNode(project, node) {
+  if (!node || !Array.isArray(node.equations) || !node.equations.length) return null;
+  const wanted = new Set(node.equations.map(normalizeEquationText));
+  const matched = (project.eqs || [])
+    .filter((eq) => wanted.has(normalizeEquationText(eq.latex)))
+    .map((eq) => eq.id);
+  return matched.length ? matched : null;
+}
+
+function pickDefiningSymbol(eq) {
+  const latex = eq?.latex || "";
+  const lhs = latex.includes("=") ? latex.split("=")[0] : latex;
+  const syms = extractSymbols(lhs || "");
+  return syms[0] || null;
+}
+
+function equationAlternativesForSymbol(project, symbol) {
+  if (!symbol) return [];
+  return (project.eqs || []).filter((eq) => pickDefiningSymbol(eq) === symbol);
+}
+
+function selectEquationForSymbol(project, symbol, eqId) {
+  if (!symbol || !eqId) return;
+  project.ui ??= {};
+  project.ui.selectedEqBySymbol ??= {};
+  project.ui.selectedEqBySymbol[symbol] = eqId;
 }
 
 function normalizeProject(project) {
@@ -658,7 +691,7 @@ const GRAPH_EDGES = [
   ["em", "fields"]
 ];
 
-function setupExplorer() {
+function setupExplorer(project) {
   const canvas = document.getElementById("graphCanvas");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
@@ -711,15 +744,68 @@ function setupExplorer() {
       focusCard.textContent = "click a node to explore its linked equations.";
       return;
     }
+    const appState = getAppState();
     const eqs = (node.equations || []).map(eq => `<li>${escapeHtml(eq)}</li>`).join("");
+    const symbols = Array.from(new Set((node.equations || []).flatMap((eq) => extractSymbols(eq))));
+    const symbolButtons = symbols.map((symbol) => {
+      const active = appState.explorerSelectedSymbol === symbol;
+      return `<button class="small symbolJump ${active ? "isActive" : ""}" data-symbol="${escapeHtml(symbol)}">${escapeHtml(symbol)}</button>`;
+    }).join("");
+    const alternatives = equationAlternativesForSymbol(project, appState.explorerSelectedSymbol);
+    const selectedEqBySymbol = project.ui?.selectedEqBySymbol || {};
+    const selectedForSymbol = appState.explorerSelectedSymbol ? selectedEqBySymbol[appState.explorerSelectedSymbol] : null;
+    const alternativesHtml = alternatives.map((eq) => {
+      const picked = selectedForSymbol === eq.id;
+      const theory = eq.theory ? `<div class="altMeta">${escapeHtml(eq.theory)}</div>` : "";
+      const doi = eq.doi ? `<a href="https://doi.org/${encodeURIComponent(eq.doi)}" target="_blank" rel="noreferrer">doi:${escapeHtml(eq.doi)}</a>` : "";
+      const source = eq.sourceUrl ? `<a href="${eq.sourceUrl}" target="_blank" rel="noreferrer">reference</a>` : "";
+      return `
+        <button class="altEq ${picked ? "isActive" : ""}" data-eqid="${eq.id}" data-symbol="${escapeHtml(appState.explorerSelectedSymbol || "")}">
+          <div class="altTop"><strong>${escapeHtml(eq.title || eq.id)}</strong>${picked ? '<span class="badge good">selected</span>' : ''}</div>
+          <div class="altLatex">${escapeHtml(eq.latex || "")}</div>
+          ${theory}
+          ${(doi || source) ? `<div class="altLinks">${doi}${source}</div>` : ""}
+        </button>
+      `;
+    }).join("");
     const refs = (node.refs || []).map(ref => `<a href="${ref.url}" target="_blank" rel="noreferrer">${escapeHtml(ref.label)}</a>`).join("");
     focusCard.innerHTML = `
       <div class="detailBadge">level ${node.level + 1}</div>
       <strong>${escapeHtml(node.label)}</strong>
       <span>${escapeHtml(node.summary || "No summary yet.")}</span>
       ${eqs ? `<ul class="detailList">${eqs}</ul>` : ""}
+      ${symbolButtons ? `<div class="focusSection"><div class="detailTitle">variables in this branch</div><div class="row">${symbolButtons}</div></div>` : ""}
+      ${alternativesHtml ? `<div class="focusSection"><div class="detailTitle">candidate equations for ${escapeHtml(appState.explorerSelectedSymbol)}</div><div class="altList">${alternativesHtml}</div></div>` : ""}
       ${refs ? `<div>refs: ${refs}</div>` : ""}
     `;
+
+    for (const button of focusCard.querySelectorAll(".symbolJump")) {
+      button.addEventListener("mouseenter", () => {
+        button.classList.add("isHover");
+      });
+      button.addEventListener("mouseleave", () => {
+        button.classList.remove("isHover");
+      });
+      button.addEventListener("click", () => {
+        appState.explorerSelectedSymbol = button.dataset.symbol || null;
+        const usage = buildUsageIndex(project);
+        appState.explorerFilterEqIds = appState.explorerSelectedSymbol ? (usage[appState.explorerSelectedSymbol] || []) : equationIdsForNode(project, node);
+        renderAll(project);
+        renderFocus(node);
+      });
+    }
+
+    for (const button of focusCard.querySelectorAll(".altEq")) {
+      button.addEventListener("click", () => {
+        const eqId = button.dataset.eqid;
+        const symbol = button.dataset.symbol;
+        if (!eqId || !symbol) return;
+        selectEquationForSymbol(project, symbol, eqId);
+        saveProject(project);
+        renderAll(project);
+        renderFocus(node);
+      });
+    }
   }
 
   function draw() {
@@ -801,7 +887,16 @@ function setupExplorer() {
       return;
     }
     const node = nodeAtPoint(ev.offsetX, ev.offsetY);
-    state.hoverId = node ? node.id : null;
+    const nextHoverId = node ? node.id : null;
+    const hoverChanged = nextHoverId !== state.hoverId;
+    state.hoverId = nextHoverId;
+    if (node && hoverChanged && !state.dragging) {
+      const appState = getAppState();
+      if (!appState.explorerSelectedSymbol) {
+        appState.explorerFilterEqIds = equationIdsForNode(project, node);
+        renderAll(project);
+      }
+    }
     canvas.style.cursor = node ? "pointer" : "grab";
     draw();
   });
@@ -810,14 +905,26 @@ function setupExplorer() {
     if (state.moved) return;
     const node = nodeAtPoint(ev.offsetX, ev.offsetY);
     if (node) {
+      const appState = getAppState();
       state.selectedId = node.id;
+      appState.explorerNodeId = node.id;
+      if (!appState.explorerSelectedSymbol) {
+        appState.explorerFilterEqIds = equationIdsForNode(project, node);
+      }
       renderFocus(node);
+      renderAll(project);
       draw();
     }
   });
   canvas.addEventListener("mouseleave", () => {
     state.dragging = false;
     state.hoverId = null;
+    const appState = getAppState();
+    if (!appState.explorerSelectedSymbol) {
+      const selectedNode = GRAPH_NODES.find((n) => n.id === state.selectedId);
+      appState.explorerFilterEqIds = equationIdsForNode(project, selectedNode);
+      renderAll(project);
+    }
     canvas.style.cursor = "grab";
     draw();
   });
@@ -959,6 +1066,7 @@ function renderCards(project) {
         <button class="small" id="btnEdit_${eq.id}">edit</button>
         <button class="small" id="btnCopy_${eq.id}">copy latex</button>
         <button class="small" id="btnWhy_${eq.id}">why?</button>
+        ${pickDefiningSymbol(eq) ? `<button class="small" id="btnUse_${eq.id}">use for ${escapeHtml(pickDefiningSymbol(eq))}</button>` : ""}
       </div>
 
       <div class="hint" id="why_${eq.id}" style="display:none;"></div>
@@ -990,6 +1098,7 @@ function renderCards(project) {
     const btnEdit = document.getElementById(`btnEdit_${eq.id}`);
     const btnCopy = document.getElementById(`btnCopy_${eq.id}`);
     const btnWhy  = document.getElementById(`btnWhy_${eq.id}`);
+    const btnUse  = document.getElementById(`btnUse_${eq.id}`);
     const whyBox  = document.getElementById(`why_${eq.id}`);
     const editWrap = document.getElementById(`edit_${eq.id}`);
     const mf = document.getElementById(`mf_${eq.id}`);
@@ -1020,6 +1129,19 @@ function renderCards(project) {
       whyBox.style.display = open ? "none" : "block";
       whyBox.innerHTML = escapeHtml(eq._diag || "no diagnostics");
     });
+
+    if (btnUse) {
+      btnUse.addEventListener("click", () => {
+        const symbol = pickDefiningSymbol(eq);
+        if (!symbol) return;
+        selectEquationForSymbol(project, symbol, eq.id);
+        const stateRef = getAppState();
+        stateRef.explorerSelectedSymbol = symbol;
+        stateRef.explorerFilterEqIds = usage[symbol] || null;
+        saveProject(project);
+        renderAll(project);
+      });
+    }
   }
 }
 
@@ -1134,7 +1256,7 @@ async function bootstrap() {
   });
 
   renderAll(project);
-  setupExplorer();
+  setupExplorer(project);
   setStatus("ready");
 }
 
