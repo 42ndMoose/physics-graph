@@ -539,120 +539,110 @@ function badgeClass(status) {
 // --------------------
 // Explorer canvas (zoom + pan)
 // --------------------
-function getAppState() {
-  globalThis.__physicsGraphAppState ??= {
-    explorerFilterEqIds: null,
-    explorerSelectedSymbol: null
-  };
-  return globalThis.__physicsGraphAppState;
-}
-
-function normalizeProject(project) {
-  const base = project && typeof project === "object" ? project : {};
-  base.project ??= { id: "proj_001", name: "physics graph", version: 1 };
-  base.vars = Array.isArray(base.vars) ? base.vars : [];
-  base.eqs = Array.isArray(base.eqs) ? base.eqs : [];
-  base.assumptions = Array.isArray(base.assumptions) ? base.assumptions : [];
-  base.values = Array.isArray(base.values) ? base.values : [];
-  base.ui ??= {};
-  return base;
-}
-
-function buildGraphFromProject(project) {
-  const eqs = project.eqs || [];
-  const vars = project.vars || [];
-  const symbols = vars.length ? vars.map(v => v.latex) : extractSymbols(eqs.map(e => e.latex).join(" "));
-
-  const nodes = [];
-  const edges = [];
-
-  nodes.push({
+const GRAPH_NODES = [
+  {
     id: "core",
-    type: "core",
-    label: project.project?.name || "physics core",
+    label: "Physics = 1",
     level: 0,
     x: 0,
     y: 0,
-    summary: "Root identity that all branches inherit from.",
-    eqIds: []
-  });
-
-  const symbolNodes = symbols.map((sym, idx) => {
-    const angle = (idx / Math.max(1, symbols.length)) * Math.PI * 2;
-    return {
-      id: `sym_${sym}`,
-      type: "symbol",
-      symbol: sym,
-      label: sym,
-      level: 1,
-      x: Math.cos(angle) * 260,
-      y: Math.sin(angle) * 200,
-      summary: "Choose which equation defines this symbol.",
-      eqIds: []
-    };
-  });
-
-  nodes.push(...symbolNodes);
-  for (const symNode of symbolNodes) {
-    edges.push(["core", symNode.id]);
+    summary: "The core conservation-style identity we want to explain through everything else."
+  },
+  {
+    id: "mechanics",
+    label: "Mechanics",
+    level: 1,
+    x: -260,
+    y: -90,
+    summary: "Mass, momentum, energy, and force relationships.",
+    equations: ["F = ma", "p = mv", "K = \\frac{1}{2}mv^2"],
+    refs: [{ label: "Newton (1687)", url: "https://doi.org/10.5479/sil.52126.39088015628375" }]
+  },
+  {
+    id: "thermo",
+    label: "Thermo",
+    level: 1,
+    x: 250,
+    y: -120,
+    summary: "Heat, work, entropy, and state variables.",
+    equations: ["\\Delta U = Q - W", "PV = nRT"],
+    refs: [{ label: "Clausius (1850)", url: "https://doi.org/10.1002/andp.18501550405" }]
+  },
+  {
+    id: "em",
+    label: "Electromagnetism",
+    level: 1,
+    x: 200,
+    y: 160,
+    summary: "Fields, charge, and light.",
+    equations: ["\\nabla \\cdot E = \\frac{\\rho}{\\epsilon_0}", "F = q(E + v \\times B)"],
+    refs: [{ label: "Maxwell (1865)", url: "https://doi.org/10.1098/rstl.1865.0008" }]
+  },
+  {
+    id: "momentum",
+    label: "Momentum",
+    level: 2,
+    x: -420,
+    y: -200,
+    summary: "Momentum continuity and collisions.",
+    equations: ["p = mv", "J = \\Delta p"]
+  },
+  {
+    id: "force",
+    label: "Force",
+    level: 2,
+    x: -360,
+    y: 20,
+    summary: "Force definitions mapped to various theories.",
+    equations: ["F = ma", "F = -\\nabla U", "F = qE"],
+    refs: [{ label: "Classical mechanics notes", url: "https://doi.org/10.1119/1.197" }]
+  },
+  {
+    id: "entropy",
+    label: "Entropy",
+    level: 2,
+    x: 360,
+    y: -240,
+    summary: "Entropy links microstates to macrostates.",
+    equations: ["S = k \\ln \\Omega", "\\Delta S \\geq 0"]
+  },
+  {
+    id: "state",
+    label: "State equations",
+    level: 2,
+    x: 420,
+    y: -20,
+    summary: "Equation-of-state relationships for matter.",
+    equations: ["PV = nRT"]
+  },
+  {
+    id: "fields",
+    label: "Field laws",
+    level: 2,
+    x: 340,
+    y: 240,
+    summary: "Maxwell and derived field equations.",
+    equations: ["\\nabla \\times B = \\mu_0 J + \\mu_0\\epsilon_0 \\frac{\\partial E}{\\partial t}"]
   }
+];
 
-  const equationNodes = eqs.map((eq, idx) => {
-    const angle = (idx / Math.max(1, eqs.length)) * Math.PI * 2;
-    return {
-      id: `eq_${eq.id}`,
-      type: "equation",
-      eqId: eq.id,
-      label: eq.title || eq.id,
-      level: 2,
-      x: Math.cos(angle) * 420,
-      y: Math.sin(angle) * 320,
-      summary: eq.description || "",
-      latex: eq.latex || "",
-      theory: eq.theory || "",
-      doi: eq.doi || "",
-      eqIds: [eq.id]
-    };
-  });
-  nodes.push(...equationNodes);
+const GRAPH_EDGES = [
+  ["core", "mechanics"],
+  ["core", "thermo"],
+  ["core", "em"],
+  ["mechanics", "momentum"],
+  ["mechanics", "force"],
+  ["thermo", "entropy"],
+  ["thermo", "state"],
+  ["em", "fields"]
+];
 
-  const symbolIndex = {};
-  for (const symNode of symbolNodes) {
-    symbolIndex[symNode.symbol] = symNode;
-  }
-
-  for (const eq of eqs) {
-    const usedSyms = extractSymbols(eq.latex || "");
-    for (const sym of usedSyms) {
-      const symNode = symbolIndex[sym];
-      if (!symNode) continue;
-      symNode.eqIds.push(eq.id);
-      edges.push([symNode.id, `eq_${eq.id}`]);
-    }
-  }
-
-  return { nodes, edges };
-}
-
-function setupExplorer(project) {
-  project ??= {
-    project: { name: "physics graph" },
-    vars: [],
-    eqs: [],
-    ui: {}
-  };
-  let canvas = document.getElementById("graphCanvas");
+function setupExplorer() {
+  const canvas = document.getElementById("graphCanvas");
   if (!canvas) return;
-  if (canvas.dataset.bound === "true") {
-    const clone = canvas.cloneNode(true);
-    canvas.parentNode.replaceChild(clone, canvas);
-    canvas = clone;
-  }
-  canvas.dataset.bound = "true";
   const ctx = canvas.getContext("2d");
   const depthLabel = document.getElementById("depthLabel");
   const focusCard = document.getElementById("focusCard");
-  const graph = buildGraphFromProject(project);
 
   const state = {
     scale: 0.95,
@@ -661,8 +651,7 @@ function setupExplorer(project) {
     moved: false,
     last: { x: 0, y: 0 },
     hoverId: null,
-    selectedId: "core",
-    sized: false
+    selectedId: "core"
   };
 
   function getDepth() {
@@ -673,7 +662,7 @@ function setupExplorer(project) {
 
   function visibleNodes() {
     const depth = getDepth() - 1;
-    return graph.nodes.filter((n) => n.level <= depth);
+    return GRAPH_NODES.filter((n) => n.level <= depth);
   }
 
   function screenPos(node) {
@@ -701,46 +690,15 @@ function setupExplorer(project) {
       focusCard.textContent = "click a node to explore its linked equations.";
       return;
     }
-    const eqsForSymbol = node.type === "symbol" ? node.eqIds : [];
-    const selectedEqBySymbol = project.ui?.selectedEqBySymbol || {};
-    const selectedEqId = node.type === "symbol" ? selectedEqBySymbol[node.symbol] : null;
-    const eqChoices = eqsForSymbol.map((eqId) => {
-      const eq = (project.eqs || []).find(e => e.id === eqId);
-      if (!eq) return "";
-      const isActive = selectedEqId === eqId;
-      const theory = eq.theory ? `<div class="detailChoiceMeta">${escapeHtml(eq.theory)}</div>` : "";
-      const doi = eq.doi ? `<div class="detailChoiceMeta"><a href="${eq.doi}" target="_blank" rel="noreferrer">${escapeHtml(eq.doi)}</a></div>` : "";
-      return `
-        <div class="detailChoice ${isActive ? "detailChoiceActive" : ""}" data-eqid="${eqId}">
-          <div class="detailChoiceTitle">${escapeHtml(eq.title || eq.id)}</div>
-          <div class="detailChoiceEq">${escapeHtml(eq.latex || "")}</div>
-          ${theory}
-          ${doi}
-        </div>
-      `;
-    }).join("");
-
+    const eqs = (node.equations || []).map(eq => `<li>${escapeHtml(eq)}</li>`).join("");
+    const refs = (node.refs || []).map(ref => `<a href="${ref.url}" target="_blank" rel="noreferrer">${escapeHtml(ref.label)}</a>`).join("");
     focusCard.innerHTML = `
       <div class="detailBadge">level ${node.level + 1}</div>
       <strong>${escapeHtml(node.label)}</strong>
       <span>${escapeHtml(node.summary || "No summary yet.")}</span>
-      ${node.type === "equation" ? `<div class="detailChoiceEq">${escapeHtml(node.latex || "")}</div>` : ""}
-      ${eqChoices ? `<div>${eqChoices}</div>` : ""}
+      ${eqs ? `<ul class="detailList">${eqs}</ul>` : ""}
+      ${refs ? `<div>refs: ${refs}</div>` : ""}
     `;
-
-    if (node.type === "symbol") {
-      focusCard.querySelectorAll("[data-eqid]").forEach((el) => {
-        el.addEventListener("click", () => {
-          const eqId = el.getAttribute("data-eqid");
-          project.ui ??= {};
-          project.ui.selectedEqBySymbol ??= {};
-          project.ui.selectedEqBySymbol[node.symbol] = eqId;
-          saveProject(project);
-          renderAll(project);
-          renderFocus(node);
-        });
-      });
-    }
   }
 
   function draw() {
@@ -749,21 +707,11 @@ function setupExplorer(project) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (nodes.length === 1 && nodes[0].id === "core") {
-      ctx.fillStyle = "rgba(154,163,178,0.8)";
-      ctx.font = "600 14px system-ui";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("Load a model to populate the map", canvas.width / 2, canvas.height / 2 - 18);
-      ctx.font = "12px system-ui";
-      ctx.fillText("Try the thermo or mechanics starter on the left", canvas.width / 2, canvas.height / 2 + 6);
-    }
-
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(122,162,255,0.3)";
-    for (const [a, b] of graph.edges) {
-      const na = graph.nodes.find(n => n.id === a);
-      const nb = graph.nodes.find(n => n.id === b);
+    for (const [a, b] of GRAPH_EDGES) {
+      const na = GRAPH_NODES.find(n => n.id === a);
+      const nb = GRAPH_NODES.find(n => n.id === b);
       if (!na || !nb) continue;
       if (!nodes.includes(na) || !nodes.includes(nb)) continue;
       const pa = screenPos(na);
@@ -808,10 +756,9 @@ function setupExplorer(project) {
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.max(320, Math.floor(rect.width));
     canvas.height = Math.max(260, Math.floor(rect.height));
-    if (!state.sized) {
+    if (!state.offset.x && !state.offset.y) {
       state.offset.x = rect.width / 2;
       state.offset.y = rect.height / 2;
-      state.sized = true;
     }
     draw();
   }
@@ -844,18 +791,6 @@ function setupExplorer(project) {
     if (node) {
       state.selectedId = node.id;
       renderFocus(node);
-      const stateRef = getAppState();
-      if (node.type === "symbol") {
-        stateRef.explorerFilterEqIds = node.eqIds;
-        stateRef.explorerSelectedSymbol = node.symbol;
-      } else if (node.type === "equation") {
-        stateRef.explorerFilterEqIds = node.eqIds;
-        stateRef.explorerSelectedSymbol = null;
-      } else {
-        stateRef.explorerFilterEqIds = null;
-        stateRef.explorerSelectedSymbol = null;
-      }
-      renderAll(project);
       draw();
     }
   });
@@ -881,7 +816,7 @@ function setupExplorer(project) {
   }, { passive: false });
 
   window.addEventListener("resize", resize);
-  renderFocus(graph.nodes.find(n => n.id === state.selectedId));
+  renderFocus(GRAPH_NODES.find(n => n.id === state.selectedId));
   resize();
 }
 
@@ -968,7 +903,7 @@ function renderCards(project) {
 
   const stateRef = getAppState();
   for (const eq of (project.eqs || [])) {
-    if (stateRef.explorerFilterEqIds && !stateRef.explorerFilterEqIds.includes(eq.id)) {
+    if (appState.explorerFilterEqIds && !appState.explorerFilterEqIds.includes(eq.id)) {
       continue;
     }
     const card = document.createElement("div");
@@ -1122,7 +1057,7 @@ async function bootstrap() {
       project = normalizeProject(obj);
       saveProject(project);
       renderAll(project);
-      safeSetupExplorer(project);
+      setupExplorer(project);
       setStatus("imported");
       setTimeout(() => setStatus("ready"), 800);
     });
@@ -1139,7 +1074,7 @@ async function bootstrap() {
         project.values = starter.values ?? [];
         saveProject(project);
         renderAll(project);
-        safeSetupExplorer(project);
+        setupExplorer(project);
         setStatus("loaded thermo starter");
         setTimeout(() => setStatus("ready"), 900);
       } catch (e) {
@@ -1160,7 +1095,7 @@ async function bootstrap() {
         project.values = starter.values ?? [];
         saveProject(project);
         renderAll(project);
-        safeSetupExplorer(project);
+        setupExplorer(project);
         setStatus("loaded mechanics starter");
         setTimeout(() => setStatus("ready"), 900);
       } catch (e) {
@@ -1178,7 +1113,7 @@ async function bootstrap() {
   });
 
   renderAll(project);
-  safeSetupExplorer(project);
+  setupExplorer();
   setStatus("ready");
 }
 
