@@ -70,7 +70,10 @@
           <div id="depthLabel" class="depthLabel">depth 1 / 3</div>
         </div>
         <div class="explorerBody">
-          <canvas id="graphCanvas" width="900" height="520" aria-label="equation graph"></canvas>
+          <div id="graphViewport" class="graphViewport" aria-label="equation graph" role="application">
+            <svg id="graphEdges" class="graphEdges" aria-hidden="true"></svg>
+            <div id="graphNodesLayer" class="graphNodesLayer"></div>
+          </div>
           <div class="explorerDetail">
             <div class="detailTitle">focus</div>
             <div id="focusCard" class="detailCard">click a node to explore its linked equations.</div>

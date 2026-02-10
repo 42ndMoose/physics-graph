@@ -691,112 +691,200 @@ const GRAPH_EDGES = [
   ["em", "fields"]
 ];
 
+function findEquationByLatex(project, latex) {
+  const target = normalizeEquationText(latex);
+  return (project.eqs || []).find((eq) => normalizeEquationText(eq.latex) === target) || null;
+}
+
+function equationForNode(project, node) {
+  const appState = getAppState();
+  const nodeEquations = node?.equations || [];
+  for (const latex of nodeEquations) {
+    const eq = findEquationByLatex(project, latex);
+    if (eq) {
+      const symbol = pickDefiningSymbol(eq);
+      const selected = symbol ? project.ui?.selectedEqBySymbol?.[symbol] : null;
+      if (!selected || selected === eq.id) return eq;
+    }
+  }
+  if (appState.explorerSelectedSymbol) {
+    const selectedId = project.ui?.selectedEqBySymbol?.[appState.explorerSelectedSymbol];
+    if (selectedId) return (project.eqs || []).find((eq) => eq.id === selectedId) || null;
+  }
+  return nodeEquations.length ? findEquationByLatex(project, nodeEquations[0]) : null;
+}
+
+function inferBalancedEquationDim(eq, varDimMap) {
+  if (!eq?.latex || !eq.latex.includes('=')) return null;
+  const lhs = eq.latex.split('=')[0].trim();
+  const res = unitsOfLatexExpr(lhs, varDimMap);
+  return res.ok ? res.dim : null;
+}
+
 function setupExplorer(project) {
-  const canvas = document.getElementById("graphCanvas");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  const depthLabel = document.getElementById("depthLabel");
-  const focusCard = document.getElementById("focusCard");
+  const viewport = document.getElementById('graphViewport');
+  const nodesLayer = document.getElementById('graphNodesLayer');
+  const edgesSvg = document.getElementById('graphEdges');
+  if (!viewport || !nodesLayer || !edgesSvg) return;
+
+  const depthLabel = document.getElementById('depthLabel');
+  const focusCard = document.getElementById('focusCard');
 
   const state = {
-    scale: 0.95,
-    offset: { x: canvas.width / 2, y: canvas.height / 2 },
+    scale: 1,
+    offset: { x: 0, y: 0 },
     dragging: false,
     moved: false,
-    last: { x: 0, y: 0 },
     hoverId: null,
-    selectedId: "core"
+    selectedId: getAppState().explorerNodeId || 'core',
+    last: { x: 0, y: 0 }
   };
 
+  const nodesById = new Map(GRAPH_NODES.map((node) => [node.id, node]));
+  const neighbors = {};
+  for (const [a, b] of GRAPH_EDGES) {
+    neighbors[a] ??= [];
+    neighbors[b] ??= [];
+    neighbors[a].push(b);
+    neighbors[b].push(a);
+  }
+
   function getDepth() {
-    if (state.scale < 1.05) return 1;
-    if (state.scale < 1.55) return 2;
+    if (state.scale < 1.1) return 1;
+    if (state.scale < 1.6) return 2;
     return 3;
   }
 
   function visibleNodes() {
-    const depth = getDepth() - 1;
-    return GRAPH_NODES.filter((n) => n.level <= depth);
+    const maxLevel = getDepth() - 1;
+    return GRAPH_NODES.filter((node) => node.level <= maxLevel);
   }
 
-  function screenPos(node) {
+  function descendants(nodeId) {
+    const depthCap = getDepth() - 1;
+    const out = [];
+    const queue = [nodeId];
+    const seen = new Set(queue);
+    while (queue.length) {
+      const curr = queue.shift();
+      for (const nextId of (neighbors[curr] || [])) {
+        if (seen.has(nextId)) continue;
+        const nextNode = nodesById.get(nextId);
+        if (!nextNode || nextNode.level <= (nodesById.get(curr)?.level ?? 0) || nextNode.level > depthCap) continue;
+        seen.add(nextId);
+        queue.push(nextId);
+        out.push(nextNode);
+      }
+    }
+    return out;
+  }
+
+  function projectPoint(node) {
     return {
       x: node.x * state.scale + state.offset.x,
       y: node.y * state.scale + state.offset.y
     };
   }
 
-  function nodeAtPoint(x, y) {
-    const nodes = visibleNodes();
-    for (const node of nodes) {
-      const p = screenPos(node);
-      const r = node.level === 0 ? 26 : node.level === 1 ? 20 : 16;
-      const dx = x - p.x;
-      const dy = y - p.y;
-      if (dx * dx + dy * dy <= (r + 6) * (r + 6)) return node;
-    }
-    return null;
+  function clampOffset() {
+    const visible = visibleNodes();
+    if (!visible.length) return;
+    const xs = visible.map((n) => n.x * state.scale);
+    const ys = visible.map((n) => n.y * state.scale);
+    const pad = 160;
+    const minX = Math.min(...xs) - pad;
+    const maxX = Math.max(...xs) + pad;
+    const minY = Math.min(...ys) - pad;
+    const maxY = Math.max(...ys) + pad;
+    const width = viewport.clientWidth;
+    const height = viewport.clientHeight;
+
+    const xMinAllowed = width - maxX;
+    const xMaxAllowed = -minX;
+    const yMinAllowed = height - maxY;
+    const yMaxAllowed = -minY;
+
+    state.offset.x = Math.min(xMaxAllowed, Math.max(xMinAllowed, state.offset.x));
+    state.offset.y = Math.min(yMaxAllowed, Math.max(yMinAllowed, state.offset.y));
   }
 
   function renderFocus(node) {
     if (!focusCard) return;
     if (!node) {
-      focusCard.textContent = "click a node to explore its linked equations.";
+      focusCard.textContent = 'hover or click an item to inspect equations.';
       return;
     }
     const appState = getAppState();
-    const eqs = (node.equations || []).map(eq => `<li>${escapeHtml(eq)}</li>`).join("");
+    const usage = buildUsageIndex(project);
+    const varDimMap = buildVarDimMap(project);
+    const nodeEquation = equationForNode(project, node);
+    const eqs = (node.equations || []).map((eq) => `<li>${escapeHtml(eq)}</li>`).join('');
     const symbols = Array.from(new Set((node.equations || []).flatMap((eq) => extractSymbols(eq))));
     const symbolButtons = symbols.map((symbol) => {
       const active = appState.explorerSelectedSymbol === symbol;
-      return `<button class="small symbolJump ${active ? "isActive" : ""}" data-symbol="${escapeHtml(symbol)}">${escapeHtml(symbol)}</button>`;
-    }).join("");
+      return `<button class="small symbolJump ${active ? 'isActive' : ''}" data-symbol="${escapeHtml(symbol)}">${escapeHtml(symbol)}</button>`;
+    }).join('');
+
     const alternatives = equationAlternativesForSymbol(project, appState.explorerSelectedSymbol);
     const selectedEqBySymbol = project.ui?.selectedEqBySymbol || {};
     const selectedForSymbol = appState.explorerSelectedSymbol ? selectedEqBySymbol[appState.explorerSelectedSymbol] : null;
     const alternativesHtml = alternatives.map((eq) => {
       const picked = selectedForSymbol === eq.id;
-      const theory = eq.theory ? `<div class="altMeta">${escapeHtml(eq.theory)}</div>` : "";
-      const doi = eq.doi ? `<a href="https://doi.org/${encodeURIComponent(eq.doi)}" target="_blank" rel="noreferrer">doi:${escapeHtml(eq.doi)}</a>` : "";
-      const source = eq.sourceUrl ? `<a href="${eq.sourceUrl}" target="_blank" rel="noreferrer">reference</a>` : "";
-      return `
-        <button class="altEq ${picked ? "isActive" : ""}" data-eqid="${eq.id}" data-symbol="${escapeHtml(appState.explorerSelectedSymbol || "")}">
-          <div class="altTop"><strong>${escapeHtml(eq.title || eq.id)}</strong>${picked ? '<span class="badge good">selected</span>' : ''}</div>
-          <div class="altLatex">${escapeHtml(eq.latex || "")}</div>
-          ${theory}
-          ${(doi || source) ? `<div class="altLinks">${doi}${source}</div>` : ""}
-        </button>
-      `;
-    }).join("");
-    const refs = (node.refs || []).map(ref => `<a href="${ref.url}" target="_blank" rel="noreferrer">${escapeHtml(ref.label)}</a>`).join("");
+      const theory = eq.theory ? `<div class="altMeta">${escapeHtml(eq.theory)}</div>` : '';
+      const doi = eq.doi ? `<a href="https://doi.org/${encodeURIComponent(eq.doi)}" target="_blank" rel="noreferrer">doi:${escapeHtml(eq.doi)}</a>` : '';
+      const source = eq.sourceUrl ? `<a href="${eq.sourceUrl}" target="_blank" rel="noreferrer">reference</a>` : '';
+      return `<button class="altEq ${picked ? 'isActive' : ''}" data-eqid="${eq.id}" data-symbol="${escapeHtml(appState.explorerSelectedSymbol || '')}"><div class="altTop"><strong>${escapeHtml(eq.title || eq.id)}</strong>${picked ? '<span class="badge good">selected</span>' : ''}</div><div class="altLatex">${escapeHtml(eq.latex || '')}</div>${theory}${(doi || source) ? `<div class="altLinks">${doi}${source}</div>` : ''}</button>`;
+    }).join('');
+
+    const nodeDim = inferBalancedEquationDim(nodeEquation, varDimMap);
+    const compatibility = (neighbors[node.id] || [])
+      .map((id) => nodesById.get(id))
+      .filter(Boolean)
+      .map((peer) => {
+        const peerEq = equationForNode(project, peer);
+        const peerDim = inferBalancedEquationDim(peerEq, varDimMap);
+        const ok = nodeDim && peerDim ? dimEq(nodeDim, peerDim) : null;
+        return `<li>${escapeHtml(peer.label)}: ${ok === null ? 'unknown' : ok ? 'compatible' : 'mismatch'} ${ok === false ? '⚠️' : ''}</li>`;
+      }).join('');
+
+    const nodeRefs = [];
+    if (nodeEquation?.doi) nodeRefs.push(`<a href="https://doi.org/${encodeURIComponent(nodeEquation.doi)}" target="_blank" rel="noreferrer">doi:${escapeHtml(nodeEquation.doi)}</a>`);
+    if (nodeEquation?.sourceUrl) nodeRefs.push(`<a href="${nodeEquation.sourceUrl}" target="_blank" rel="noreferrer">reference</a>`);
+    for (const ref of (node.refs || [])) nodeRefs.push(`<a href="${ref.url}" target="_blank" rel="noreferrer">${escapeHtml(ref.label)}</a>`);
+
+    const expanded = descendants(node.id).map((n) => `<li>${escapeHtml(n.label)}</li>`).join('');
     focusCard.innerHTML = `
       <div class="detailBadge">level ${node.level + 1}</div>
       <strong>${escapeHtml(node.label)}</strong>
-      <span>${escapeHtml(node.summary || "No summary yet.")}</span>
-      ${eqs ? `<ul class="detailList">${eqs}</ul>` : ""}
-      ${symbolButtons ? `<div class="focusSection"><div class="detailTitle">variables in this branch</div><div class="row">${symbolButtons}</div></div>` : ""}
-      ${alternativesHtml ? `<div class="focusSection"><div class="detailTitle">candidate equations for ${escapeHtml(appState.explorerSelectedSymbol)}</div><div class="altList">${alternativesHtml}</div></div>` : ""}
-      ${refs ? `<div>refs: ${refs}</div>` : ""}
+      <span>${escapeHtml(node.summary || 'No summary yet.')}</span>
+      ${nodeEquation ? `<div class="focusEq" id="focusEq"></div><div class="focusEqLabel">${escapeHtml(nodeEquation.title || 'equation')}</div>` : ''}
+      ${eqs ? `<ul class="detailList">${eqs}</ul>` : ''}
+      ${expanded ? `<div class="focusSection"><div class="detailTitle">expanded downstream items</div><ul class="detailList">${expanded}</ul></div>` : ''}
+      ${symbolButtons ? `<div class="focusSection"><div class="detailTitle">variables in this branch</div><div class="row">${symbolButtons}</div></div>` : ''}
+      ${alternativesHtml ? `<div class="focusSection"><div class="detailTitle">candidate equations for ${escapeHtml(appState.explorerSelectedSymbol)}</div><div class="altList">${alternativesHtml}</div></div>` : ''}
+      ${compatibility ? `<div class="focusSection"><div class="detailTitle">adjacent consistency</div><ul class="detailList">${compatibility}</ul></div>` : ''}
+      ${nodeRefs.length ? `<div class="focusSection"><div class="detailTitle">citations</div><div class="altLinks">${nodeRefs.join('')}</div></div>` : ''}
     `;
 
-    for (const button of focusCard.querySelectorAll(".symbolJump")) {
-      button.addEventListener("mouseenter", () => {
-        button.classList.add("isHover");
-      });
-      button.addEventListener("mouseleave", () => {
-        button.classList.remove("isHover");
-      });
-      button.addEventListener("click", () => {
+    if (nodeEquation) {
+      const eqEl = focusCard.querySelector('#focusEq');
+      if (eqEl) {
+        try { katex.render(nodeEquation.latex, eqEl, { throwOnError: false, displayMode: true }); }
+        catch { eqEl.textContent = nodeEquation.latex; }
+      }
+    }
+
+    for (const button of focusCard.querySelectorAll('.symbolJump')) {
+      button.addEventListener('click', () => {
         appState.explorerSelectedSymbol = button.dataset.symbol || null;
-        const usage = buildUsageIndex(project);
         appState.explorerFilterEqIds = appState.explorerSelectedSymbol ? (usage[appState.explorerSelectedSymbol] || []) : equationIdsForNode(project, node);
         renderAll(project);
         renderFocus(node);
       });
     }
 
-    for (const button of focusCard.querySelectorAll(".altEq")) {
-      button.addEventListener("click", () => {
+    for (const button of focusCard.querySelectorAll('.altEq')) {
+      button.addEventListener('click', () => {
         const eqId = button.dataset.eqid;
         const symbol = button.dataset.symbol;
         if (!eqId || !symbol) return;
@@ -804,148 +892,131 @@ function setupExplorer(project) {
         saveProject(project);
         renderAll(project);
         renderFocus(node);
+        renderGraph();
       });
     }
   }
 
-  function draw() {
-    const depth = getDepth();
+  function renderGraph() {
     const nodes = visibleNodes();
+    clampOffset();
+    edgesSvg.setAttribute('viewBox', `0 0 ${viewport.clientWidth} ${viewport.clientHeight}`);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const edgeMarkup = GRAPH_EDGES
+      .map(([a, b]) => [nodesById.get(a), nodesById.get(b)])
+      .filter(([a, b]) => a && b && nodes.includes(a) && nodes.includes(b))
+      .map(([a, b]) => {
+        const pa = projectPoint(a);
+        const pb = projectPoint(b);
+        const active = a.id === state.selectedId || b.id === state.selectedId;
+        return `<line x1="${pa.x}" y1="${pa.y}" x2="${pb.x}" y2="${pb.y}" class="mapEdge ${active ? 'isActive' : ''}" />`;
+      }).join('');
+    edgesSvg.innerHTML = edgeMarkup;
 
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(122,162,255,0.3)";
-    for (const [a, b] of GRAPH_EDGES) {
-      const na = GRAPH_NODES.find(n => n.id === a);
-      const nb = GRAPH_NODES.find(n => n.id === b);
-      if (!na || !nb) continue;
-      if (!nodes.includes(na) || !nodes.includes(nb)) continue;
-      const pa = screenPos(na);
-      const pb = screenPos(nb);
-      ctx.beginPath();
-      ctx.moveTo(pa.x, pa.y);
-      ctx.lineTo(pb.x, pb.y);
-      ctx.stroke();
-    }
-
+    nodesLayer.innerHTML = '';
     for (const node of nodes) {
-      const p = screenPos(node);
-      const r = node.level === 0 ? 26 : node.level === 1 ? 20 : 16;
-      const isSelected = node.id === state.selectedId;
+      const p = projectPoint(node);
+      const card = document.createElement('button');
+      const nodeEq = equationForNode(project, node);
       const isHover = node.id === state.hoverId;
-      const fill = node.level === 0 ? "#7aa2ff" : node.level === 1 ? "#2fe38c" : "#ffd166";
-
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r + (isHover ? 3 : 0), 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(15,19,26,0.9)";
-      ctx.fill();
-      ctx.lineWidth = isSelected ? 3 : 1.5;
-      ctx.strokeStyle = isSelected ? "#ffffff" : fill;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r - 4, 0, Math.PI * 2);
-      ctx.fillStyle = fill;
-      ctx.fill();
-
-      ctx.fillStyle = "#0b0d10";
-      ctx.font = "600 12px system-ui";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(node.label, p.x, p.y);
-    }
-
-    if (depthLabel) depthLabel.textContent = `depth ${depth} / 3`;
-  }
-
-  function resize() {
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(320, Math.floor(rect.width));
-    canvas.height = Math.max(260, Math.floor(rect.height));
-    if (!state.offset.x && !state.offset.y) {
-      state.offset.x = rect.width / 2;
-      state.offset.y = rect.height / 2;
-    }
-    draw();
-  }
-
-  canvas.addEventListener("mousedown", (ev) => {
-    state.dragging = true;
-    state.moved = false;
-    state.last = { x: ev.offsetX, y: ev.offsetY };
-  });
-  canvas.addEventListener("mousemove", (ev) => {
-    if (state.dragging) {
-      const dx = ev.offsetX - state.last.x;
-      const dy = ev.offsetY - state.last.y;
-      if (Math.abs(dx) + Math.abs(dy) > 2) state.moved = true;
-      state.offset.x += dx;
-      state.offset.y += dy;
-      state.last = { x: ev.offsetX, y: ev.offsetY };
-      draw();
-      return;
-    }
-    const node = nodeAtPoint(ev.offsetX, ev.offsetY);
-    const nextHoverId = node ? node.id : null;
-    const hoverChanged = nextHoverId !== state.hoverId;
-    state.hoverId = nextHoverId;
-    if (node && hoverChanged && !state.dragging) {
-      const appState = getAppState();
-      if (!appState.explorerSelectedSymbol) {
-        appState.explorerFilterEqIds = equationIdsForNode(project, node);
+      const isSelected = node.id === state.selectedId;
+      card.className = `mapNode level${node.level} ${isHover ? 'isHover' : ''} ${isSelected ? 'isSelected' : ''}`;
+      card.style.left = `${p.x}px`;
+      card.style.top = `${p.y}px`;
+      card.dataset.nodeid = node.id;
+      card.innerHTML = `<div class="mapEquation" id="map_eq_${node.id}"></div><div class="mapLabel">${escapeHtml(node.label)}</div>${nodeEq?.doi ? `<div class="mapRef">doi:${escapeHtml(nodeEq.doi)}</div>` : '<div class="mapRef">reference tagged</div>'}`;
+      card.addEventListener('mouseenter', () => {
+        state.hoverId = node.id;
+        renderFocus(node);
+        renderGraph();
+      });
+      card.addEventListener('mouseleave', () => {
+        state.hoverId = null;
+        renderGraph();
+      });
+      card.addEventListener('click', () => {
+        state.selectedId = node.id;
+        const appState = getAppState();
+        appState.explorerNodeId = node.id;
+        if (!appState.explorerSelectedSymbol) appState.explorerFilterEqIds = equationIdsForNode(project, node);
+        renderFocus(node);
         renderAll(project);
+        renderGraph();
+      });
+      nodesLayer.appendChild(card);
+
+      const eqEl = card.querySelector(`#map_eq_${node.id}`);
+      const fallback = nodeEq?.latex || (node.equations?.[0] || node.label);
+      if (eqEl) {
+        try { katex.render(fallback, eqEl, { throwOnError: false, displayMode: true }); }
+        catch { eqEl.textContent = fallback; }
       }
     }
-    canvas.style.cursor = node ? "pointer" : "grab";
-    draw();
-  });
-  canvas.addEventListener("mouseup", (ev) => {
-    state.dragging = false;
-    if (state.moved) return;
-    const node = nodeAtPoint(ev.offsetX, ev.offsetY);
-    if (node) {
+
+    if (depthLabel) depthLabel.textContent = `depth ${getDepth()} / 3`;
+  }
+
+  function zoomAt(multiplier, centerX, centerY) {
+    const next = Math.min(2.6, Math.max(0.85, state.scale * multiplier));
+    const wx = (centerX - state.offset.x) / state.scale;
+    const wy = (centerY - state.offset.y) / state.scale;
+    state.scale = next;
+    state.offset.x = centerX - wx * state.scale;
+    state.offset.y = centerY - wy * state.scale;
+    clampOffset();
+  }
+
+  function onWheel(ev) {
+    ev.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    zoomAt(ev.deltaY < 0 ? 1.1 : 0.9, x, y);
+    if (state.hoverId && ev.deltaY < 0) {
+      state.selectedId = state.hoverId;
+      const node = nodesById.get(state.selectedId);
       const appState = getAppState();
-      state.selectedId = node.id;
-      appState.explorerNodeId = node.id;
-      if (!appState.explorerSelectedSymbol) {
-        appState.explorerFilterEqIds = equationIdsForNode(project, node);
-      }
+      appState.explorerNodeId = state.selectedId;
+      if (node && !appState.explorerSelectedSymbol) appState.explorerFilterEqIds = equationIdsForNode(project, node);
       renderFocus(node);
       renderAll(project);
-      draw();
     }
-  });
-  canvas.addEventListener("mouseleave", () => {
-    state.dragging = false;
-    state.hoverId = null;
-    const appState = getAppState();
-    if (!appState.explorerSelectedSymbol) {
-      const selectedNode = GRAPH_NODES.find((n) => n.id === state.selectedId);
-      appState.explorerFilterEqIds = equationIdsForNode(project, selectedNode);
-      renderAll(project);
-    }
-    canvas.style.cursor = "grab";
-    draw();
-  });
-  canvas.addEventListener("wheel", (ev) => {
-    ev.preventDefault();
-    const scaleBy = ev.deltaY < 0 ? 1.08 : 0.92;
-    const nextScale = Math.min(2.4, Math.max(0.7, state.scale * scaleBy));
-    const rect = canvas.getBoundingClientRect();
-    const mx = ev.clientX - rect.left;
-    const my = ev.clientY - rect.top;
-    const wx = (mx - state.offset.x) / state.scale;
-    const wy = (my - state.offset.y) / state.scale;
-    state.scale = nextScale;
-    state.offset.x = mx - wx * state.scale;
-    state.offset.y = my - wy * state.scale;
-    draw();
-  }, { passive: false });
+    renderGraph();
+  }
 
-  window.addEventListener("resize", resize);
-  renderFocus(GRAPH_NODES.find(n => n.id === state.selectedId));
-  resize();
+  viewport.onmousedown = (ev) => {
+    state.dragging = true;
+    state.moved = false;
+    state.last = { x: ev.clientX, y: ev.clientY };
+  };
+  window.onmouseup = () => { state.dragging = false; };
+  viewport.onmousemove = (ev) => {
+    if (!state.dragging) return;
+    const dx = ev.clientX - state.last.x;
+    const dy = ev.clientY - state.last.y;
+    if (Math.abs(dx) + Math.abs(dy) > 2) state.moved = true;
+    state.offset.x += dx;
+    state.offset.y += dy;
+    state.last = { x: ev.clientX, y: ev.clientY };
+    clampOffset();
+    renderGraph();
+  };
+  viewport.onwheel = onWheel;
+
+  function centerInitial() {
+    state.offset.x = viewport.clientWidth / 2;
+    state.offset.y = viewport.clientHeight / 2;
+    clampOffset();
+  }
+
+  window.addEventListener('resize', () => {
+    clampOffset();
+    renderGraph();
+  });
+
+  centerInitial();
+  renderFocus(nodesById.get(state.selectedId));
+  renderGraph();
 }
 
 // --------------------
