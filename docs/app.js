@@ -510,6 +510,334 @@ function badgeClass(status) {
 }
 
 // --------------------
+// Explorer canvas (zoom + pan)
+// --------------------
+const appState = {
+  explorerFilterEqIds: null,
+  explorerSelectedSymbol: null
+};
+
+function buildGraphFromProject(project) {
+  const eqs = project.eqs || [];
+  const vars = project.vars || [];
+  const symbols = vars.length ? vars.map(v => v.latex) : extractSymbols(eqs.map(e => e.latex).join(" "));
+
+  const nodes = [];
+  const edges = [];
+
+  nodes.push({
+    id: "core",
+    type: "core",
+    label: project.project?.name || "physics core",
+    level: 0,
+    x: 0,
+    y: 0,
+    summary: "Root identity that all branches inherit from.",
+    eqIds: []
+  });
+
+  const symbolNodes = symbols.map((sym, idx) => {
+    const angle = (idx / Math.max(1, symbols.length)) * Math.PI * 2;
+    return {
+      id: `sym_${sym}`,
+      type: "symbol",
+      symbol: sym,
+      label: sym,
+      level: 1,
+      x: Math.cos(angle) * 260,
+      y: Math.sin(angle) * 200,
+      summary: "Choose which equation defines this symbol.",
+      eqIds: []
+    };
+  });
+
+  nodes.push(...symbolNodes);
+  for (const symNode of symbolNodes) {
+    edges.push(["core", symNode.id]);
+  }
+
+  const equationNodes = eqs.map((eq, idx) => {
+    const angle = (idx / Math.max(1, eqs.length)) * Math.PI * 2;
+    return {
+      id: `eq_${eq.id}`,
+      type: "equation",
+      eqId: eq.id,
+      label: eq.title || eq.id,
+      level: 2,
+      x: Math.cos(angle) * 420,
+      y: Math.sin(angle) * 320,
+      summary: eq.description || "",
+      latex: eq.latex || "",
+      theory: eq.theory || "",
+      doi: eq.doi || "",
+      eqIds: [eq.id]
+    };
+  });
+  nodes.push(...equationNodes);
+
+  const symbolIndex = {};
+  for (const symNode of symbolNodes) {
+    symbolIndex[symNode.symbol] = symNode;
+  }
+
+  for (const eq of eqs) {
+    const usedSyms = extractSymbols(eq.latex || "");
+    for (const sym of usedSyms) {
+      const symNode = symbolIndex[sym];
+      if (!symNode) continue;
+      symNode.eqIds.push(eq.id);
+      edges.push([symNode.id, `eq_${eq.id}`]);
+    }
+  }
+
+  return { nodes, edges };
+}
+
+function setupExplorer(project) {
+  let canvas = document.getElementById("graphCanvas");
+  if (!canvas) return;
+  if (canvas.dataset.bound === "true") {
+    const clone = canvas.cloneNode(true);
+    canvas.parentNode.replaceChild(clone, canvas);
+    canvas = clone;
+  }
+  canvas.dataset.bound = "true";
+  const ctx = canvas.getContext("2d");
+  const depthLabel = document.getElementById("depthLabel");
+  const focusCard = document.getElementById("focusCard");
+  const graph = buildGraphFromProject(project);
+
+  const state = {
+    scale: 0.95,
+    offset: { x: canvas.width / 2, y: canvas.height / 2 },
+    dragging: false,
+    moved: false,
+    last: { x: 0, y: 0 },
+    hoverId: null,
+    selectedId: "core",
+    sized: false
+  };
+
+  function getDepth() {
+    if (state.scale < 1.05) return 1;
+    if (state.scale < 1.55) return 2;
+    return 3;
+  }
+
+  function visibleNodes() {
+    const depth = getDepth() - 1;
+    return graph.nodes.filter((n) => n.level <= depth);
+  }
+
+  function screenPos(node) {
+    return {
+      x: node.x * state.scale + state.offset.x,
+      y: node.y * state.scale + state.offset.y
+    };
+  }
+
+  function nodeAtPoint(x, y) {
+    const nodes = visibleNodes();
+    for (const node of nodes) {
+      const p = screenPos(node);
+      const r = node.level === 0 ? 26 : node.level === 1 ? 20 : 16;
+      const dx = x - p.x;
+      const dy = y - p.y;
+      if (dx * dx + dy * dy <= (r + 6) * (r + 6)) return node;
+    }
+    return null;
+  }
+
+  function renderFocus(node) {
+    if (!focusCard) return;
+    if (!node) {
+      focusCard.textContent = "click a node to explore its linked equations.";
+      return;
+    }
+    const eqsForSymbol = node.type === "symbol" ? node.eqIds : [];
+    const selectedEqBySymbol = project.ui?.selectedEqBySymbol || {};
+    const selectedEqId = node.type === "symbol" ? selectedEqBySymbol[node.symbol] : null;
+    const eqChoices = eqsForSymbol.map((eqId) => {
+      const eq = (project.eqs || []).find(e => e.id === eqId);
+      if (!eq) return "";
+      const isActive = selectedEqId === eqId;
+      const theory = eq.theory ? `<div class="detailChoiceMeta">${escapeHtml(eq.theory)}</div>` : "";
+      const doi = eq.doi ? `<div class="detailChoiceMeta"><a href="${eq.doi}" target="_blank" rel="noreferrer">${escapeHtml(eq.doi)}</a></div>` : "";
+      return `
+        <div class="detailChoice ${isActive ? "detailChoiceActive" : ""}" data-eqid="${eqId}">
+          <div class="detailChoiceTitle">${escapeHtml(eq.title || eq.id)}</div>
+          <div class="detailChoiceEq">${escapeHtml(eq.latex || "")}</div>
+          ${theory}
+          ${doi}
+        </div>
+      `;
+    }).join("");
+
+    focusCard.innerHTML = `
+      <div class="detailBadge">level ${node.level + 1}</div>
+      <strong>${escapeHtml(node.label)}</strong>
+      <span>${escapeHtml(node.summary || "No summary yet.")}</span>
+      ${node.type === "equation" ? `<div class="detailChoiceEq">${escapeHtml(node.latex || "")}</div>` : ""}
+      ${eqChoices ? `<div>${eqChoices}</div>` : ""}
+    `;
+
+    if (node.type === "symbol") {
+      focusCard.querySelectorAll("[data-eqid]").forEach((el) => {
+        el.addEventListener("click", () => {
+          const eqId = el.getAttribute("data-eqid");
+          project.ui ??= {};
+          project.ui.selectedEqBySymbol ??= {};
+          project.ui.selectedEqBySymbol[node.symbol] = eqId;
+          saveProject(project);
+          renderAll(project);
+          renderFocus(node);
+        });
+      });
+    }
+  }
+
+  function draw() {
+    const depth = getDepth();
+    const nodes = visibleNodes();
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (nodes.length === 1 && nodes[0].id === "core") {
+      ctx.fillStyle = "rgba(154,163,178,0.8)";
+      ctx.font = "600 14px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("Load a model to populate the map", canvas.width / 2, canvas.height / 2 - 18);
+      ctx.font = "12px system-ui";
+      ctx.fillText("Try the thermo or mechanics starter on the left", canvas.width / 2, canvas.height / 2 + 6);
+    }
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(122,162,255,0.3)";
+    for (const [a, b] of graph.edges) {
+      const na = graph.nodes.find(n => n.id === a);
+      const nb = graph.nodes.find(n => n.id === b);
+      if (!na || !nb) continue;
+      if (!nodes.includes(na) || !nodes.includes(nb)) continue;
+      const pa = screenPos(na);
+      const pb = screenPos(nb);
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.stroke();
+    }
+
+    for (const node of nodes) {
+      const p = screenPos(node);
+      const r = node.level === 0 ? 26 : node.level === 1 ? 20 : 16;
+      const isSelected = node.id === state.selectedId;
+      const isHover = node.id === state.hoverId;
+      const fill = node.level === 0 ? "#7aa2ff" : node.level === 1 ? "#2fe38c" : "#ffd166";
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r + (isHover ? 3 : 0), 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(15,19,26,0.9)";
+      ctx.fill();
+      ctx.lineWidth = isSelected ? 3 : 1.5;
+      ctx.strokeStyle = isSelected ? "#ffffff" : fill;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r - 4, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+
+      ctx.fillStyle = "#0b0d10";
+      ctx.font = "600 12px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(node.label, p.x, p.y);
+    }
+
+    if (depthLabel) depthLabel.textContent = `depth ${depth} / 3`;
+  }
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(320, Math.floor(rect.width));
+    canvas.height = Math.max(260, Math.floor(rect.height));
+    if (!state.sized) {
+      state.offset.x = rect.width / 2;
+      state.offset.y = rect.height / 2;
+      state.sized = true;
+    }
+    draw();
+  }
+
+  canvas.addEventListener("mousedown", (ev) => {
+    state.dragging = true;
+    state.moved = false;
+    state.last = { x: ev.offsetX, y: ev.offsetY };
+  });
+  canvas.addEventListener("mousemove", (ev) => {
+    if (state.dragging) {
+      const dx = ev.offsetX - state.last.x;
+      const dy = ev.offsetY - state.last.y;
+      if (Math.abs(dx) + Math.abs(dy) > 2) state.moved = true;
+      state.offset.x += dx;
+      state.offset.y += dy;
+      state.last = { x: ev.offsetX, y: ev.offsetY };
+      draw();
+      return;
+    }
+    const node = nodeAtPoint(ev.offsetX, ev.offsetY);
+    state.hoverId = node ? node.id : null;
+    canvas.style.cursor = node ? "pointer" : "grab";
+    draw();
+  });
+  canvas.addEventListener("mouseup", (ev) => {
+    state.dragging = false;
+    if (state.moved) return;
+    const node = nodeAtPoint(ev.offsetX, ev.offsetY);
+    if (node) {
+      state.selectedId = node.id;
+      renderFocus(node);
+      if (node.type === "symbol") {
+        appState.explorerFilterEqIds = node.eqIds;
+        appState.explorerSelectedSymbol = node.symbol;
+      } else if (node.type === "equation") {
+        appState.explorerFilterEqIds = node.eqIds;
+        appState.explorerSelectedSymbol = null;
+      } else {
+        appState.explorerFilterEqIds = null;
+        appState.explorerSelectedSymbol = null;
+      }
+      renderAll(project);
+      draw();
+    }
+  });
+  canvas.addEventListener("mouseleave", () => {
+    state.dragging = false;
+    state.hoverId = null;
+    canvas.style.cursor = "grab";
+    draw();
+  });
+  canvas.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    const scaleBy = ev.deltaY < 0 ? 1.08 : 0.92;
+    const nextScale = Math.min(2.4, Math.max(0.7, state.scale * scaleBy));
+    const rect = canvas.getBoundingClientRect();
+    const mx = ev.clientX - rect.left;
+    const my = ev.clientY - rect.top;
+    const wx = (mx - state.offset.x) / state.scale;
+    const wy = (my - state.offset.y) / state.scale;
+    state.scale = nextScale;
+    state.offset.x = mx - wx * state.scale;
+    state.offset.y = my - wy * state.scale;
+    draw();
+  }, { passive: false });
+
+  window.addEventListener("resize", resize);
+  renderFocus(graph.nodes.find(n => n.id === state.selectedId));
+  resize();
+}
+
+// --------------------
 // Rendering
 // --------------------
 function renderInspector(project, usage, symbol) {
@@ -579,6 +907,8 @@ function renderCards(project) {
 
   const usage = buildUsageIndex(project);
   const varDimMap = buildVarDimMap(project);
+  const selectedEqBySymbol = project.ui?.selectedEqBySymbol || {};
+  const selectedEqIds = new Set(Object.values(selectedEqBySymbol || {}));
 
   for (const eq of (project.eqs || [])) {
     const res = unitCheckEquation(eq.latex || "", varDimMap);
@@ -589,11 +919,15 @@ function renderCards(project) {
   renderInspector(project, usage, null);
 
   for (const eq of (project.eqs || [])) {
+    if (appState.explorerFilterEqIds && !appState.explorerFilterEqIds.includes(eq.id)) {
+      continue;
+    }
     const card = document.createElement("div");
     card.className = "card";
 
     const tags = (eq.tags ?? []).join(", ");
     const status = eq._status ?? "unknown";
+    const isSelected = selectedEqIds.has(eq.id);
 
     card.innerHTML = `
       <div class="cardTop">
@@ -601,7 +935,10 @@ function renderCards(project) {
           <div class="cardTitle">${escapeHtml(eq.title)}</div>
           <div class="cardTags">${escapeHtml(tags)}</div>
         </div>
-        <div class="${badgeClass(status)}">${escapeHtml(status)}</div>
+        <div class="row" style="justify-content:flex-end;">
+          ${isSelected ? `<div class="badge good">selected</div>` : ""}
+          <div class="${badgeClass(status)}">${escapeHtml(status)}</div>
+        </div>
       </div>
 
       <div class="mathBox">
@@ -734,6 +1071,7 @@ async function bootstrap() {
       project = obj;
       saveProject(project);
       renderAll(project);
+      setupExplorer(project);
       setStatus("imported");
       setTimeout(() => setStatus("ready"), 800);
     });
@@ -750,6 +1088,7 @@ async function bootstrap() {
         project.values = starter.values ?? [];
         saveProject(project);
         renderAll(project);
+        setupExplorer(project);
         setStatus("loaded thermo starter");
         setTimeout(() => setStatus("ready"), 900);
       } catch (e) {
@@ -770,6 +1109,7 @@ async function bootstrap() {
         project.values = starter.values ?? [];
         saveProject(project);
         renderAll(project);
+        setupExplorer(project);
         setStatus("loaded mechanics starter");
         setTimeout(() => setStatus("ready"), 900);
       } catch (e) {
@@ -787,6 +1127,7 @@ async function bootstrap() {
   });
 
   renderAll(project);
+  setupExplorer(project);
   setStatus("ready");
 }
 
