@@ -1022,16 +1022,9 @@ function safeSetupExplorer(project) {
 async function bootstrap() {
   setStatus("loading…");
 
-  let project = loadProject();
-  if (!project) {
-    project = {
-      project: { id: "proj_001", name: "physics graph", version: 1 },
-      vars: [],
-      eqs: [],
-      assumptions: [],
-      values: [],
-      ui: {}
-    };
+  const loadedProject = loadProject();
+  let project = normalizeProject(loadedProject);
+  if (!loadedProject) {
     saveProject(project);
   }
 
@@ -1061,7 +1054,7 @@ async function bootstrap() {
         setStatus("import failed");
         return;
       }
-      project = obj;
+      project = normalizeProject(obj);
       saveProject(project);
       renderAll(project);
       setupExplorer(project);
