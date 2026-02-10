@@ -526,3 +526,83 @@ body {
   font-size: 12px;
   color: var(--muted);
 }
+
+
+.calculator {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  padding: 12px;
+  margin-bottom: 18px;
+}
+
+.calcTop {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.calcTop select,
+.calcTop input {
+  width: 100%;
+  margin-top: 6px;
+  background: #0f131a;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.calcResult {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 14px;
+  background: #0f131a;
+}
+
+.calcResult.good { border-color: rgba(47,227,140,0.5); color: var(--good); }
+.calcResult.warn { border-color: rgba(255,209,102,0.5); color: var(--warn); }
+
+.calcKnown {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.calcKnownItem {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.calcGrid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.calcField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.calcField small {
+  color: var(--muted);
+}
+
+.calcField input {
+  width: 100%;
+  background: #0f131a;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+}

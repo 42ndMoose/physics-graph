@@ -1,0 +1,76 @@
+{
+  "project": {
+    "id": "proj_cda_water",
+    "name": "cda-eos water map",
+    "version": 1
+  },
+  "vars": [
+    { "id": "v_a_tot", "latex": "a_{\\text{tot}}", "name": "total molar Helmholtz free energy", "type": "scalar", "units": "J/mol" },
+    { "id": "v_a_iapws", "latex": "a_{\\text{IAPWS}}", "name": "IAPWS-95 base Helmholtz", "type": "scalar", "units": "J/mol" },
+    { "id": "v_a_assoc", "latex": "a_{\\text{assoc}}", "name": "association contribution", "type": "scalar", "units": "J/mol" },
+    { "id": "v_lambda", "latex": "\\lambda", "name": "association weight", "type": "scalar", "units": "1" },
+    { "id": "v_Delta", "latex": "\\Delta", "name": "effective association strength", "type": "scalar", "units": "m^3/mol" },
+    { "id": "v_Delta0", "latex": "\\Delta_0", "name": "bare association strength", "type": "scalar", "units": "m^3/mol" },
+    { "id": "v_alpha", "latex": "\\alpha", "name": "baseline association level", "type": "scalar", "units": "1" },
+    { "id": "v_n", "latex": "n", "name": "curvature-driven network factor", "type": "scalar", "units": "1" },
+    { "id": "v_Rabs", "latex": "\\mathcal{R}_{\\mathrm{abs}}", "name": "regularized curvature magnitude", "type": "scalar", "units": "m^3/mol" },
+    { "id": "v_R0", "latex": "\\mathcal{R}_0", "name": "curvature scale", "type": "scalar", "units": "m^3/mol" },
+    { "id": "v_rho", "latex": "\\rho", "name": "molar density", "type": "scalar", "units": "mol/m^3" },
+    { "id": "v_X", "latex": "X", "name": "fraction of unbonded sites", "type": "scalar", "units": "1" },
+    { "id": "v_m", "latex": "m", "name": "association site multiplicity", "type": "scalar", "units": "1" }
+  ],
+  "assumptions": [
+    { "id": "iapws_base", "label": "IAPWS-95 base frozen for curvature", "enabled": true },
+    { "id": "single_site_reduction", "label": "single effective 4-site association reduction", "enabled": true }
+  ],
+  "values": [
+    { "latex": "\\lambda", "value": 1 },
+    { "latex": "\\alpha", "value": 0.2 },
+    { "latex": "n", "value": 0.9 },
+    { "latex": "\\Delta_0", "value": 0.0012 },
+    { "latex": "m", "value": 4 },
+    { "latex": "\\rho", "value": 55000 }
+  ],
+  "eqs": [
+    {
+      "id": "eq_cda_total_helmholtz",
+      "title": "CDA-EOS total Helmholtz construction",
+      "latex": "a_{\\text{tot}} = a_{\\text{IAPWS}} + \\lambda a_{\\text{assoc}}",
+      "tags": ["thermo", "cda-eos", "paper-map"],
+      "theory": "CDA-EOS (Paras, 2026)",
+      "status": "unknown"
+    },
+    {
+      "id": "eq_cda_delta_feedback",
+      "title": "Curvature-dependent association coupling",
+      "latex": "\\Delta = \\Delta_0[\\alpha + (1-\\alpha)n]",
+      "tags": ["thermo", "cda-eos", "paper-map"],
+      "theory": "CDA-EOS (Paras, 2026)",
+      "status": "unknown"
+    },
+    {
+      "id": "eq_cda_network",
+      "title": "Network factor from regularized curvature",
+      "latex": "n = 1-e^{-\\frac{\\mathcal{R}_{\\mathrm{abs}}}{\\mathcal{R}_0}}",
+      "tags": ["thermo", "cda-eos", "paper-map"],
+      "theory": "CDA-EOS (Paras, 2026)",
+      "status": "unknown"
+    },
+    {
+      "id": "eq_cda_mass_action",
+      "title": "Reduced mass-action closure",
+      "latex": "X = [1 + \\rho m X \\Delta]^{-1}",
+      "tags": ["thermo", "cda-eos", "paper-map"],
+      "theory": "SAFT-style association within CDA-EOS",
+      "status": "unknown"
+    },
+    {
+      "id": "eq_cda_pressure_split",
+      "title": "Pressure split with association correction",
+      "latex": "p = p_{\\text{IAPWS}} + p_{\\text{assoc}}",
+      "tags": ["thermo", "cda-eos", "paper-map"],
+      "theory": "CDA-EOS (Paras, 2026)",
+      "status": "unknown"
+    }
+  ]
+}
