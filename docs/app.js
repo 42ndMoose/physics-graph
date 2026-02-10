@@ -863,6 +863,8 @@ function renderCards(project) {
 
   const usage = buildUsageIndex(project);
   const varDimMap = buildVarDimMap(project);
+  const selectedEqBySymbol = project.ui?.selectedEqBySymbol || {};
+  const selectedEqIds = new Set(Object.values(selectedEqBySymbol || {}));
 
   for (const eq of (project.eqs || [])) {
     const res = unitCheckEquation(eq.latex || "", varDimMap);
@@ -873,11 +875,15 @@ function renderCards(project) {
   renderInspector(project, usage, null);
 
   for (const eq of (project.eqs || [])) {
+    if (appState.explorerFilterEqIds && !appState.explorerFilterEqIds.includes(eq.id)) {
+      continue;
+    }
     const card = document.createElement("div");
     card.className = "card";
 
     const tags = (eq.tags ?? []).join(", ");
     const status = eq._status ?? "unknown";
+    const isSelected = selectedEqIds.has(eq.id);
 
     card.innerHTML = `
       <div class="cardTop">
@@ -885,7 +891,10 @@ function renderCards(project) {
           <div class="cardTitle">${escapeHtml(eq.title)}</div>
           <div class="cardTags">${escapeHtml(tags)}</div>
         </div>
-        <div class="${badgeClass(status)}">${escapeHtml(status)}</div>
+        <div class="row" style="justify-content:flex-end;">
+          ${isSelected ? `<div class="badge good">selected</div>` : ""}
+          <div class="${badgeClass(status)}">${escapeHtml(status)}</div>
+        </div>
       </div>
 
       <div class="mathBox">
@@ -1018,6 +1027,7 @@ async function bootstrap() {
       project = obj;
       saveProject(project);
       renderAll(project);
+      setupExplorer(project);
       setStatus("imported");
       setTimeout(() => setStatus("ready"), 800);
     });
@@ -1034,6 +1044,7 @@ async function bootstrap() {
         project.values = starter.values ?? [];
         saveProject(project);
         renderAll(project);
+        setupExplorer(project);
         setStatus("loaded thermo starter");
         setTimeout(() => setStatus("ready"), 900);
       } catch (e) {
@@ -1054,6 +1065,7 @@ async function bootstrap() {
         project.values = starter.values ?? [];
         saveProject(project);
         renderAll(project);
+        setupExplorer(project);
         setStatus("loaded mechanics starter");
         setTimeout(() => setStatus("ready"), 900);
       } catch (e) {
