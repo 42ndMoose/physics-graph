@@ -901,6 +901,7 @@ function renderCards(project) {
 
   renderInspector(project, usage, null);
 
+  const stateRef = getAppState();
   for (const eq of (project.eqs || [])) {
     if (appState.explorerFilterEqIds && !appState.explorerFilterEqIds.includes(eq.id)) {
       continue;
