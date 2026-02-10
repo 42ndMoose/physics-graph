@@ -670,6 +670,15 @@ const GRAPH_NODES = [
     equations: ["PV = nRT"]
   },
   {
+    id: "water_cda",
+    label: "CDA-EOS water",
+    level: 2,
+    x: 520,
+    y: -160,
+    summary: "Curvature-driven hydrogen-bond cooperativity layered on IAPWS-95.",
+    equations: ["a_{\\text{tot}} = a_{\\text{IAPWS}} + \\lambda a_{\\text{assoc}}", "\\Delta = \\Delta_0[\\alpha + (1-\\alpha)n]"]
+  },
+  {
     id: "fields",
     label: "Field laws",
     level: 2,
@@ -688,6 +697,7 @@ const GRAPH_EDGES = [
   ["mechanics", "force"],
   ["thermo", "entropy"],
   ["thermo", "state"],
+  ["thermo", "water_cda"],
   ["em", "fields"]
 ];
 
@@ -1082,6 +1092,280 @@ function renderVarsTable(project) {
   el.innerHTML = header + rows;
 }
 
+function getValueMap(project) {
+  const out = {};
+  for (const entry of (project.values || [])) {
+    if (!entry?.latex) continue;
+    if (!Number.isFinite(entry.value)) continue;
+    out[entry.latex] = entry.value;
+  }
+  return out;
+}
+
+function setValue(project, latex, value) {
+  if (!latex) return;
+  project.values ??= [];
+  const existing = project.values.find((v) => v.latex === latex);
+  if (!Number.isFinite(value)) {
+    if (existing) project.values = project.values.filter((v) => v.latex !== latex);
+    return;
+  }
+  if (existing) {
+    existing.value = value;
+    return;
+  }
+  project.values.push({ latex, value });
+}
+
+function evalLatexNumeric(latex, valueMap) {
+  const tokens = tokenizeLatex(latex || "");
+  let i = 0;
+  const read = () => tokens[i] || null;
+  const eat = (x) => {
+    if (tokens[i] === x) {
+      i++;
+      return true;
+    }
+    return false;
+  };
+
+  function readGroup() {
+    if (!eat("{")) return null;
+    let depth = 1;
+    const out = [];
+    while (i < tokens.length && depth > 0) {
+      const t = tokens[i++];
+      if (t === "{") depth++;
+      else if (t === "}") depth--;
+      if (depth > 0) out.push(t);
+    }
+    return depth === 0 ? out : null;
+  }
+
+  function parsePrimary() {
+    const t = read();
+    if (!t) return null;
+    if (eat("(")) {
+      const n = parseExpr();
+      if (n == null || !eat(")")) return null;
+      return n;
+    }
+    if (eat("-")) {
+      const n = parsePrimary();
+      return n == null ? null : -n;
+    }
+    if (t === "\\frac") {
+      i++;
+      const a = readGroup();
+      const b = readGroup();
+      if (!a || !b) return null;
+      const av = evalLatexNumeric(a.join(""), valueMap);
+      const bv = evalLatexNumeric(b.join(""), valueMap);
+      if (!Number.isFinite(av) || !Number.isFinite(bv) || Math.abs(bv) < 1e-12) return null;
+      return av / bv;
+    }
+    if (/^[0-9.]+$/.test(t)) {
+      i++;
+      return Number(t);
+    }
+    if (t === "{") {
+      const g = readGroup();
+      if (!g) return null;
+      return evalLatexNumeric(g.join(""), valueMap);
+    }
+    if (/^\\[a-zA-Z]+$/.test(t) || /^[a-zA-Z]$/.test(t)) {
+      i++;
+      if (eat("_")) {
+        if (read() === "{") {
+          const g = readGroup();
+          if (!g) return null;
+        } else {
+          i++;
+        }
+      }
+      const value = valueMap[t];
+      return Number.isFinite(value) ? value : null;
+    }
+    return null;
+  }
+
+  function parseFactor() {
+    let n = parsePrimary();
+    if (n == null) return null;
+    if (eat("^")) {
+      let p = null;
+      const t = read();
+      if (/^[0-9.]+$/.test(t || "")) {
+        i++;
+        p = Number(t);
+      } else if (t === "{") {
+        const g = readGroup();
+        if (!g) return null;
+        p = Number(g.join(""));
+      }
+      if (!Number.isFinite(p)) return null;
+      n = n ** p;
+    }
+    return n;
+  }
+
+  function isFactorStart(t) {
+    if (!t) return false;
+    return t === "(" || t === "{" || t === "\\frac" || /^[a-zA-Z]$/.test(t) || /^\\[a-zA-Z]+$/.test(t) || /^[0-9.]+$/.test(t) || t === "-";
+  }
+
+  function parseTerm() {
+    let n = parseFactor();
+    if (n == null) return null;
+    while (true) {
+      const t = read();
+      if (eat("*")) {
+        const r = parseFactor();
+        if (r == null) return null;
+        n *= r;
+        continue;
+      }
+      if (eat("/")) {
+        const r = parseFactor();
+        if (r == null || Math.abs(r) < 1e-12) return null;
+        n /= r;
+        continue;
+      }
+      if (isFactorStart(t)) {
+        const r = parseFactor();
+        if (r == null) return null;
+        n *= r;
+        continue;
+      }
+      break;
+    }
+    return n;
+  }
+
+  function parseExpr() {
+    let n = parseTerm();
+    if (n == null) return null;
+    while (true) {
+      if (eat("+")) {
+        const r = parseTerm();
+        if (r == null) return null;
+        n += r;
+        continue;
+      }
+      if (eat("-")) {
+        const r = parseTerm();
+        if (r == null) return null;
+        n -= r;
+        continue;
+      }
+      break;
+    }
+    return n;
+  }
+
+  const out = parseExpr();
+  return i === tokens.length && Number.isFinite(out) ? out : null;
+}
+
+function solveSimpleEquation(eqLatex, valueMap) {
+  const parts = (eqLatex || "").split("=");
+  if (parts.length !== 2) return { ok: false, why: "needs one '='" };
+  const lhs = parts[0].trim();
+  const rhs = parts[1].trim();
+  const lhsSymbols = extractSymbols(lhs);
+  if (lhsSymbols.length !== 1 || normalizeEquationText(lhs) !== normalizeEquationText(lhsSymbols[0])) {
+    return { ok: false, why: "solver expects a single symbol on left side" };
+  }
+  const target = lhsSymbols[0];
+  const value = evalLatexNumeric(rhs, valueMap);
+  if (!Number.isFinite(value)) return { ok: false, why: "missing one or more RHS values" };
+  return { ok: true, target, value };
+}
+
+function renderCalculator(project) {
+  const root = document.getElementById("calculator");
+  if (!root) return;
+
+  const valueMap = getValueMap(project);
+  const candidates = (project.eqs || []).filter((eq) => {
+    const parts = (eq.latex || "").split("=");
+    if (parts.length !== 2) return false;
+    const lhsSymbols = extractSymbols(parts[0]);
+    return lhsSymbols.length === 1 && normalizeEquationText(parts[0]) === normalizeEquationText(lhsSymbols[0]);
+  });
+
+  project.ui ??= {};
+  if (!project.ui.calcEqId && candidates.length) {
+    const scored = candidates.map((eq) => {
+      const rhsSymbols = extractSymbols((eq.latex || "").split("=")[1] || "");
+      const knownCount = rhsSymbols.filter((symbol) => Number.isFinite(valueMap[symbol])).length;
+      return { eq, knownCount };
+    }).sort((a, b) => b.knownCount - a.knownCount);
+    project.ui.calcEqId = scored[0]?.eq?.id || candidates[0].id;
+  }
+  const activeEqId = project.ui.calcEqId;
+  const activeEq = candidates.find((eq) => eq.id === activeEqId) || candidates[0] || null;
+  const solution = activeEq ? solveSimpleEquation(activeEq.latex, valueMap) : { ok: false, why: "no supported equations" };
+
+  const known = Object.entries(valueMap)
+    .map(([symbol, value]) => `<span class="calcKnownItem">${escapeHtml(symbol)} = ${Number(value).toPrecision(6)}</span>`)
+    .join("");
+
+  const eqOptions = candidates.map((eq) => {
+    const selected = eq.id === activeEq?.id ? "selected" : "";
+    return `<option value="${escapeHtml(eq.id)}" ${selected}>${escapeHtml(eq.title || eq.id)} — ${escapeHtml(eq.latex)}</option>`;
+  }).join("");
+
+  const symbolFields = (project.vars || []).map((v) => {
+    const val = Number.isFinite(valueMap[v.latex]) ? valueMap[v.latex] : "";
+    return `
+      <label class="calcField">
+        <span>${escapeHtml(v.latex)} <small>${escapeHtml(v.units || "")}</small></span>
+        <input type="number" step="any" data-symbol="${escapeHtml(v.latex)}" value="${escapeHtml(String(val))}" placeholder="value" />
+      </label>
+    `;
+  }).join("");
+
+  const paperHint = (project.eqs || [])
+    .filter((eq) => (eq.tags || []).includes("cda-eos"))
+    .slice(0, 4)
+    .map((eq) => `<li><strong>${escapeHtml(eq.title || eq.id)}</strong>: ${escapeHtml(eq.latex)}</li>`)
+    .join("");
+
+  root.innerHTML = `
+    <div class="calcTop">
+      <label>equation
+        <select id="calcEqSelect">${eqOptions || `<option>no directly solvable equations yet</option>`}</select>
+      </label>
+      <div class="calcResult ${solution.ok ? "good" : "warn"}">
+        ${solution.ok ? `${escapeHtml(solution.target)} = <strong>${Number(solution.value).toPrecision(8)}</strong>` : escapeHtml(solution.why || "")}
+      </div>
+    </div>
+    <div class="calcKnown">${known || '<span class="calcKnownItem">No values yet.</span>'}</div>
+    <div class="calcGrid">${symbolFields}</div>
+    ${paperHint ? `<div class="focusSection"><div class="detailTitle">paper equations currently mapped</div><ul class="detailList">${paperHint}</ul></div>` : ""}
+  `;
+
+  const select = document.getElementById("calcEqSelect");
+  if (select) {
+    select.addEventListener("change", () => {
+      project.ui.calcEqId = select.value;
+      saveProject(project);
+      renderCalculator(project);
+    });
+  }
+
+  for (const input of root.querySelectorAll("input[data-symbol]")) {
+    input.addEventListener("input", () => {
+      const symbol = input.getAttribute("data-symbol");
+      const value = Number(input.value);
+      setValue(project, symbol, Number.isFinite(value) ? value : null);
+      saveProject(project);
+      renderCalculator(project);
+    });
+  }
+}
+
 function renderCards(project) {
   const cards = document.getElementById("cards");
   if (!cards) return;
@@ -1218,6 +1502,7 @@ function renderCards(project) {
 
 function renderAll(project) {
   renderCards(project);
+  renderCalculator(project);
   renderVarsTable(project);
 }
 
@@ -1315,6 +1600,28 @@ async function bootstrap() {
       } catch (e) {
         console.error(e);
         setStatus("failed to load mechanics.json");
+      }
+    });
+  }
+
+
+  const loadCda = document.getElementById("loadCda");
+  if (loadCda) {
+    loadCda.addEventListener("click", async () => {
+      try {
+        const starter = await fetchJson("./models/cda_water.json");
+        project.vars = starter.vars || [];
+        project.eqs = starter.eqs || [];
+        project.assumptions = starter.assumptions ?? [];
+        project.values = starter.values ?? [];
+        saveProject(project);
+        renderAll(project);
+        setupExplorer(project);
+        setStatus("loaded cda-eos starter");
+        setTimeout(() => setStatus("ready"), 900);
+      } catch (e) {
+        console.error(e);
+        setStatus("failed to load cda_water.json");
       }
     });
   }
