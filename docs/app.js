@@ -414,14 +414,26 @@ function safeJsonParse(s) {
   try { return JSON.parse(s); } catch { return null; }
 }
 
+function safeStorageGet(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function safeStorageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch {}
+}
+
+function safeStorageRemove(key) {
+  try { localStorage.removeItem(key); } catch {}
+}
+
 function loadProject() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = safeStorageGet(STORAGE_KEY);
   if (!raw) return null;
   return safeJsonParse(raw);
 }
 
 function saveProject(project) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(project, null, 2));
+  safeStorageSet(STORAGE_KEY, JSON.stringify(project, null, 2));
 }
 
 function downloadJson(filename, obj) {
@@ -437,9 +449,24 @@ function downloadJson(filename, obj) {
 }
 
 async function fetchJson(path) {
-  const res = await fetch(path, { cache: "no-store" });
-  if (!res.ok) throw new Error(`failed to load: ${path}`);
-  return await res.json();
+  const candidates = [path];
+  if (path.startsWith("./models/")) {
+    candidates.push(`./docs/models/${path.split("/").pop()}`);
+  }
+  if (path.startsWith("./docs/models/")) {
+    candidates.push(`./models/${path.split("/").pop()}`);
+  }
+  let lastErr = null;
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(candidate, { cache: "no-store" });
+      if (res.ok) return await res.json();
+      lastErr = new Error(`failed to load: ${candidate}`);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error(`failed to load: ${path}`);
 }
 
 function getOrCreateSymbolColors(project) {
@@ -1008,7 +1035,7 @@ async function bootstrap() {
   const btnReset = document.getElementById("btnReset");
   if (btnReset) {
     btnReset.addEventListener("click", () => {
-      localStorage.removeItem(STORAGE_KEY);
+      safeStorageRemove(STORAGE_KEY);
       location.reload();
     });
   }
