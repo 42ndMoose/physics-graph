@@ -1007,6 +1007,15 @@ function renderAll(project) {
   renderVarsTable(project);
 }
 
+function safeSetupExplorer(project) {
+  try {
+    setupExplorer(project);
+  } catch (err) {
+    console.error("explorer init failed", err);
+    setStatus("explorer unavailable");
+  }
+}
+
 // --------------------
 // Bootstrap
 // --------------------
