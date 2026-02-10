@@ -60,6 +60,24 @@
         <div id="status" class="status">loading…</div>
       </div>
 
+      <div class="sectionTitle">equation map</div>
+      <div class="explorer">
+        <div class="explorerHeader">
+          <div>
+            <div class="explorerTitle">scroll to zoom, drag to pan</div>
+            <div class="explorerSubtitle">zooming deeper reveals more detailed branches</div>
+          </div>
+          <div id="depthLabel" class="depthLabel">depth 1 / 3</div>
+        </div>
+        <div class="explorerBody">
+          <canvas id="graphCanvas" width="900" height="520" aria-label="equation graph"></canvas>
+          <div class="explorerDetail">
+            <div class="detailTitle">focus</div>
+            <div id="focusCard" class="detailCard">click a node to explore its linked equations.</div>
+          </div>
+        </div>
+      </div>
+
       <div id="cards" class="cards"></div>
       
       <div class="sectionTitle">variables</div>
